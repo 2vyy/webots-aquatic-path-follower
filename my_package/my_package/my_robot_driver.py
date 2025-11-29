@@ -49,27 +49,27 @@ class MyRobotDriver():
     def step(self):
         # update pose
         gps_values = self.gps.getValues()
-        currX = gps_values[0]
-        currZ = gps_values[1]
+        curr_x = gps_values[0]
+        curr_y = gps_values[1]
         compass_values = self.compass.getValues()
         curr_yaw = angle_mod(math.atan2(compass_values[0], compass_values[2]))
         
         # pure pursuit implementation
         # find closest point on path, get angle and dist displacement to it 
-        (target_idx, target_x, target_z) = self.find_target_path_point(currX, currZ) 
+        (target_idx, target_x, target_y) = self.find_target_path_point(curr_x, curr_y) 
 
         # check if at final point (done?)
         final_x = self.full_path_x[-1]
-        final_z = self.full_path_y[-1]
-        dist_to_end = math.sqrt((currX - final_x)**2 + (currZ - final_z)**2)
+        final_y = self.full_path_y[-1]
+        dist_to_end = math.sqrt((curr_x - final_x)**2 + (curr_y - final_y)**2)
         if dist_to_end < self.arrival_radius:
             print(f"*** Reached End of Path ***")
             self.left_prop_motor.setVelocity(0.0)
             self.right_prop_motor.setVelocity(0.0)
             return
 
-        angle_error = angle_mod(math.atan2(target_x - currX, target_z - currZ) - curr_yaw)
-        dist = math.sqrt((currX - target_x)**2 + (currZ - target_z)**2)
+        angle_error = angle_mod(math.atan2(target_x - curr_x, target_y - curr_y) - curr_yaw)
+        dist = math.sqrt((curr_x - target_x)**2 + (curr_y - target_y)**2)
 
         # get required angular velocity
         omega = (self.v_max * math.sin(angle_error)) / dist
@@ -77,12 +77,12 @@ class MyRobotDriver():
         self.left_prop_motor.setVelocity(self.v_max - omega_clamp * self.wheel_base)
         self.right_prop_motor.setVelocity(self.v_max + omega_clamp * self.wheel_base)
         
-        print(f"Pose: (x:{currX:.2f}, z:{currZ:.2f}, yaw:{math.degrees(curr_yaw):.1f}°) | "
-              f"Target: (idx:{target_idx}, x:{target_x:.2f}, z:{target_z:.2f}) | "
+        print(f"Pose: (x:{curr_x:.2f}, y:{curr_y:.2f}, yaw:{math.degrees(curr_yaw):.1f}°) | "
+              f"Target: (idx:{target_idx}, x:{target_x:.2f}, y:{target_y:.2f}) | "
               f"Angle Error: {math.degrees(angle_error):.1f}° | "
               f"Omega: {omega_clamp:.2f}", flush=True)
 
-    def plan_path(self, plan_start_x, plan_start_z, plan_start_yaw):
+    def plan_path(self, plan_start_x, plan_start_y, plan_start_yaw):
         """
         Generates the full path by combining together Dubins paths
         from the robot's start pose to each subsequent waypoint.
@@ -90,17 +90,17 @@ class MyRobotDriver():
         print("--- Planning full route ---", flush=True)
 
         self.full_path_x.append(plan_start_x)
-        self.full_path_y.append(plan_start_z)
+        self.full_path_y.append(plan_start_y)
         self.full_path_yaw.append(plan_start_yaw)
 
         for i, pose in enumerate(self.waypoints):
-            goal_x, goal_z, goal_yaw = pose[0], pose[1], pose[2]
-            print(f"Planning segment {i+1}: from ({plan_start_x:.1f}, {plan_start_z:.1f}) to ({goal_x:.1f}, {goal_z:.1f})")
+            goal_x, goal_y, goal_yaw = pose[0], pose[1], pose[2]
+            print(f"Planning segment {i+1}: from ({plan_start_x:.1f}, {plan_start_y:.1f}) to ({goal_x:.1f}, {goal_y:.1f})")
 
             # for this pair of waypoints, get the dubins path between them and add them ontoo full_plot
             path_x, path_y, path_yaw, _, _ = plan_dubins_path(
-                plan_start_x, plan_start_z, plan_start_yaw,
-                goal_x, goal_z, goal_yaw,
+                plan_start_x, plan_start_y, plan_start_yaw,
+                goal_x, goal_y, goal_yaw,
                 self.curvature,
                 step_size=self.path_step_size
             )
@@ -110,11 +110,11 @@ class MyRobotDriver():
             self.full_path_yaw.extend(path_yaw[1:])
             # set new start of next path
             plan_start_x = path_x[-1]
-            plan_start_z = path_y[-1]
+            plan_start_y = path_y[-1]
             plan_start_yaw = path_yaw[-1]
         self.generate_full_path_visualization()
 
-    def find_target_path_point(self, currX, currZ):
+    def find_target_path_point(self, curr_x, curr_y):
         """
         Finds the next target point on the path for the Pure Pursuit controller.
         
@@ -126,9 +126,9 @@ class MyRobotDriver():
         closest_idx = self.last_target_idx
         # start from last known index
         for i in range(self.last_target_idx, len(self.full_path_x)):
-            dx = currX - self.full_path_x[i]
-            dz = currZ - self.full_path_y[i]
-            dist = math.sqrt(dx*dx + dz*dz)
+            dx = curr_x - self.full_path_x[i]
+            dy = curr_y - self.full_path_y[i]
+            dist = math.sqrt(dx*dx + dy*dy)
             if dist < closest_dist:
                 closest_dist = dist
                 closest_idx = i
@@ -138,9 +138,9 @@ class MyRobotDriver():
         # search forward from found closest point for the lookahead target
         target_idx = closest_idx
         for i in range(closest_idx, len(self.full_path_x)):
-            dx = currX - self.full_path_x[i]
-            dz = currZ - self.full_path_y[i]
-            dist = math.sqrt(dx*dx + dz*dz)
+            dx = curr_x - self.full_path_x[i]
+            dy = curr_y - self.full_path_y[i]
+            dist = math.sqrt(dx*dx + dy*dy)
             if dist >= self.Ld:
                 target_idx = i
                 break
@@ -150,8 +150,8 @@ class MyRobotDriver():
         
         self.last_target_idx = target_idx
         target_x = self.full_path_x[target_idx]
-        target_z = self.full_path_y[target_idx]
-        return target_idx, target_x, target_z
+        target_y = self.full_path_y[target_idx]
+        return target_idx, target_x, target_y
     
     # these are for generating the graph of the planned path
     # (you do have to run the program twice if you make a change to the computed path for it to render in webots)
@@ -177,24 +177,24 @@ class MyRobotDriver():
             for i in range(len(self.full_path_x)):
                 if i > 0 and i % label_every_n_points == 0:
                     x = self.full_path_x[i]
-                    z = self.full_path_y[i]
-                    ax.plot(x, z, 'o', color='#00008B', markersize=3, zorder=3) # Dark blue dot                    
-                    ax.text(x, z + 0.15, str(i), ha='center', va='bottom', 
+                    y = self.full_path_y[i]
+                    ax.plot(x, y, 'o', color='#00008B', markersize=3, zorder=3) # Dark blue dot                    
+                    ax.text(x, y + 0.15, str(i), ha='center', va='bottom', 
                             fontsize=7, color='black', zorder=6)
             start_x = self.full_path_x[0]
-            start_z = self.full_path_y[0]
-            self._plot_arrow(ax, start_x, start_z, 
+            start_y = self.full_path_y[0]
+            self._plot_arrow(ax, start_x, start_y, 
                              self.full_path_yaw[0], fc='g') # Green for start
-            ax.text(start_x, start_z + 0.2, "Start (Idx 0)", ha='center', va='bottom', 
+            ax.text(start_x, start_y + 0.2, "Start (Idx 0)", ha='center', va='bottom', 
                     fontsize=9, color='g', zorder=6)
             for i, pose in enumerate(self.waypoints):
-                x, z, yaw = pose[0], pose[1], pose[2]
-                self._plot_arrow(ax, x, z, yaw, fc='r')
-                ax.text(x + 0.3, z, f"Goal {i}", ha='center', va='bottom', 
+                x, y, yaw = pose[0], pose[1], pose[2]
+                self._plot_arrow(ax, x, y, yaw, fc='r')
+                ax.text(x + 0.3, y, f"Goal {i}", ha='center', va='bottom', 
                         fontsize=9, color='r', zorder=6)
-            ax.text(0, -5.8, "X coordinate (m)", 
+            ax.text(0, -5.8, "X coordinate", 
                     ha='center', va='bottom', fontsize=10, zorder=10)
-            ax.text(-5.8, 0, "Z coordinate (m) [North]", 
+            ax.text(-5.8, 0, "Y coordinate", 
                     ha='left', va='center', rotation=90, fontsize=10, zorder=10)
             ticks = [-9, -8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9] # Skip 0
             ax.set_xticks(ticks)
