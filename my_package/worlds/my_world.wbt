@@ -1,0 +1,210 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/floors/protos/RectangleArena.proto"
+
+WorldInfo {}
+Viewpoint {
+  orientation -.6 .6 .6 2.1
+  position 0 0 40
+  follow ""
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  wallHeight 0.5
+  floorSize 18 18
+}
+Fluid {
+  translation 0 0 0
+  children [
+    DEF pool Shape {
+      appearance PBRAppearance {
+        transparency 0.5
+      }
+      geometry Box {
+        size 18 18 0.5
+      }
+    }
+  ]
+  boundingObject USE pool
+  locked TRUE
+}
+Transform {
+  translation 0 0 0.005
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColorMap ImageTexture {
+          url [ "../../../../../floor_texture.png" ]
+        }
+        roughness 1.0
+        metalness 0.0
+      }
+      geometry Box {
+        size 18 18 0.01
+      }
+    }
+  ]
+}
+Robot {
+  name "my_robot"
+  controller "<extern>"
+  translation 0 0 0.25
+  rotation 0 0.7 0.7 3.14
+  immersionProperties [
+    DEF Board_Imm ImmersionProperties {
+      fluidName "fluid"
+      viscousResistanceForceCoefficient 3 # was 3
+      viscousResistanceTorqueCoefficient 1 # was 1
+    }
+  ]
+  children [
+    # Main body
+    Transform {
+      translation 0 0 0.05
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            roughness 0.5
+          }
+          geometry Capsule {
+            radius 0.1
+            height 0.5
+          }
+        }
+      ]
+    }
+    # Left wing
+    Transform {
+      translation -0.25 0 0.05
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            roughness 0.5
+          }
+          geometry Box {
+            size 0.3 0.05 0.05
+          }
+        }
+      ]
+    }
+    # Right wing
+    Transform {
+      translation 0.25 0 0.05
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            roughness 0.5
+          }
+          geometry Box {
+            size 0.3 0.05 0.05
+          }
+        }
+      ]
+    }
+    # Left propeller
+    Transform {
+      translation -0.25 0 0.05
+      children [
+        Propeller {
+          shaftAxis 0 0 -1
+          centerOfThrust 0 0 0
+          thrustConstants 1 0
+          torqueConstants 0 0
+          fastHelixThreshold 75.4
+          device RotationalMotor {
+            name "left_prop_motor"
+            maxVelocity 20
+          }
+          fastHelix Solid {
+            children [
+              Transform {
+                rotation 0 0 0 1.5708
+                children [
+                  Shape {
+                    appearance PBRAppearance {
+                      baseColor 0.7 0.7 0.7
+                    }
+                    geometry Cylinder {
+                      radius 0.03
+                      height 0.1
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+    # Right propeller
+    Transform {
+      translation 0.25 0 0.05
+      children [
+        Propeller {
+          shaftAxis 0 0 -1
+          centerOfThrust 0 0 0
+          thrustConstants 1 0
+          torqueConstants 0 0
+          fastHelixThreshold 75.4
+          device RotationalMotor {
+            name "right_prop_motor"
+            maxVelocity 20
+          }
+          fastHelix Solid {
+            children [
+              Transform {
+                rotation 0 0 0 1.5708
+                children [
+                  Shape {
+                    appearance PBRAppearance {
+                      baseColor 0.7 0.7 0.7
+                    }
+                    geometry Cylinder {
+                      radius 0.03
+                      height 0.1
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+    GPS {
+      name "gps"
+    }
+    Compass {
+      name "compass"
+    }
+  ]
+  boundingObject Transform {
+    translation 0 0 0.05
+    children [
+      Shape {
+        geometry Capsule {
+          radius 0.1
+          height 0.5
+        }
+      }
+    ]
+  }
+  physics Physics {
+    density 500           # Less than water (1000 kg/m^3), so it floats (was 500)
+    mass -1               # Let Webots compute mass from density and geometry
+    centerOfMass [ ]      # Leave empty for automatic calculation
+    inertiaMatrix [ ]     # Leave empty for automatic calculation
+    damping Damping {
+      linear 0.5          # Simulates water drag (higher = more resistance) (was 0.5)
+      angular 0.5         # Simulates rotational drag (prevents rolling) (was 0.5)
+    }
+  }
+}
