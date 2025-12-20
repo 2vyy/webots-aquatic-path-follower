@@ -50,6 +50,59 @@ Transform {
     }
   ]
 }
+Solid {
+  translation 1.25 1.25 0.5
+  children [
+    DEF OBSTACLE_SHAPE Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.2 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 1.5 1.5 1
+      }
+    }
+  ]
+  name "static_obstacle"
+  boundingObject USE OBSTACLE_SHAPE
+}
+Solid {
+  translation -2.0 -2.0 0.5
+  children [
+    DEF OBSTACLE_CYLINDER Shape {
+      appearance PBRAppearance {
+        baseColor 0.2 0.2 0.8
+        roughness 0.3
+        metalness 0
+      }
+      geometry Cylinder {
+        height 1.0
+        radius 0.5
+      }
+    }
+  ]
+  name "obstacle_cylinder"
+  boundingObject USE OBSTACLE_CYLINDER
+}
+Solid {
+  translation 2.0 -4.0 0.5
+  rotation 0 0 1 0.785398
+  children [
+    DEF OBSTACLE_WALL Shape {
+      appearance PBRAppearance {
+        baseColor 0.2 0.8 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 4.0 0.5 1.0
+      }
+    }
+  ]
+  name "obstacle_wall"
+  boundingObject USE OBSTACLE_WALL
+}
 Robot {
   name "my_robot"
   controller "<extern>"

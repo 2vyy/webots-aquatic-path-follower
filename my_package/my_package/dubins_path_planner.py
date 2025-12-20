@@ -7,7 +7,7 @@ author Atsushi Sakai(@Atsushi_twi)
 """
 import sys
 import pathlib
-sys.path.append(str(pathlib.Path(__file__).parent.parent.parent))
+
 
 from math import sin, cos, atan2, sqrt, acos, pi, hypot
 import numpy as np
@@ -17,7 +17,7 @@ show_animation = True
 
 
 def plan_dubins_path(s_x, s_y, s_yaw, g_x, g_y, g_yaw, curvature,
-                     step_size=0.25, selected_types=None):
+                     step_size=0.25, selected_types=None, collision_check_fn=None):
     """
     Plan dubins path
 
@@ -93,9 +93,13 @@ def plan_dubins_path(s_x, s_y, s_yaw, g_x, g_y, g_yaw, curvature,
     local_goal_y = le_xy[1]
     local_goal_yaw = g_yaw - s_yaw
 
+    # Normalize step_size (m) -> (rad) for the internal logic which uses normalized curvature (1.0)
+    # The internal logic treats length as "normalized length" (curvature * length)
+    normalized_step_size = step_size * curvature
+
     lp_x, lp_y, lp_yaw, modes, lengths = _dubins_path_planning_from_origin(
-        local_goal_x, local_goal_y, local_goal_yaw, curvature, step_size,
-        planning_funcs)
+        local_goal_x, local_goal_y, local_goal_yaw, curvature, normalized_step_size,
+        planning_funcs, s_x, s_y, s_yaw, collision_check_fn)
 
     # Convert a local coordinate path to the global coordinate
     rot = rot_mat_2d(-s_yaw)
@@ -108,7 +112,10 @@ def plan_dubins_path(s_x, s_y, s_yaw, g_x, g_y, g_yaw, curvature,
 
 
 def _mod2pi(theta):
-    return angle_mod(theta, zero_2_2pi=True)
+    theta = angle_mod(theta, zero_2_2pi=True)
+    if abs(theta - 2.0 * pi) < 1e-6:
+        return 0.0
+    return theta
 
 
 def _calc_trig_funcs(alpha, beta):
@@ -131,6 +138,7 @@ def _LSL(alpha, beta, d):
     d2 = sqrt(p_squared)
     d3 = _mod2pi(beta - tmp)
     return d1, d2, d3, mode
+
 
 
 def _RSR(alpha, beta, d):
@@ -201,7 +209,9 @@ _PATH_TYPE_MAP = {"LSL": _LSL, "RSR": _RSR, "LSR": _LSR, "RSL": _RSL,
 
 
 def _dubins_path_planning_from_origin(end_x, end_y, end_yaw, curvature,
-                                      step_size, planning_funcs):
+                                      step_size, planning_funcs,
+                                      s_x=0.0, s_y=0.0, s_yaw=0.0,
+                                      collision_check_fn=None):
     dx = end_x
     dy = end_y
     d = hypot(dx, dy) * curvature
@@ -212,6 +222,10 @@ def _dubins_path_planning_from_origin(end_x, end_y, end_yaw, curvature,
 
     best_cost = float("inf")
     b_d1, b_d2, b_d3, b_mode = None, None, None, None
+    b_x_list, b_y_list, b_yaw_list = None, None, None
+
+    # Pre-compute rotation matrix for global coordinate conversion
+    rot = rot_mat_2d(-s_yaw)
 
     for planner in planning_funcs:
         d1, d2, d3, mode = planner(alpha, beta, d)
@@ -219,16 +233,38 @@ def _dubins_path_planning_from_origin(end_x, end_y, end_yaw, curvature,
             continue
 
         cost = (abs(d1) + abs(d2) + abs(d3))
-        if best_cost > cost:  # Select minimum length one.
-            b_d1, b_d2, b_d3, b_mode, best_cost = d1, d2, d3, mode, cost
+        # Skip if this path is already longer than the best valid one
+        if cost >= best_cost:
+            continue
 
-    lengths = [b_d1, b_d2, b_d3]
-    x_list, y_list, yaw_list = _generate_local_course(lengths, b_mode,
-                                                      curvature, step_size)
+        # Generate path for this candidate to check for collisions
+        temp_lengths = [d1, d2, d3]
+        t_x, t_y, t_yaw = _generate_local_course(temp_lengths, mode,
+                                                  curvature, step_size)
 
-    lengths = [length / curvature for length in lengths]
+        # Check for collisions if a collision checker is provided
+        if collision_check_fn is not None:
+            # Convert to global coordinates for collision check
+            converted_xy = np.stack([t_x, t_y]).T @ rot
+            global_x = converted_xy[:, 0] + s_x
+            global_y = converted_xy[:, 1] + s_y
+            global_yaw = angle_mod(np.array(t_yaw) + s_yaw)
 
-    return x_list, y_list, yaw_list, b_mode, lengths
+            if collision_check_fn(global_x, global_y, global_yaw):
+                # Collision detected, skip this path
+                continue
+
+        # This path is valid and shorter than previous best
+        b_d1, b_d2, b_d3, b_mode, best_cost = d1, d2, d3, mode, cost
+        b_x_list, b_y_list, b_yaw_list = t_x, t_y, t_yaw
+
+    # If no valid path was found, return empty/None
+    if b_mode is None:
+        return [], [], [], None, [None, None, None]
+
+    lengths = [b_d1 / curvature, b_d2 / curvature, b_d3 / curvature]
+
+    return b_x_list, b_y_list, b_yaw_list, b_mode, lengths
 
 
 def _interpolate(length, mode, max_curvature, origin_x, origin_y,
@@ -268,7 +304,7 @@ def _generate_local_course(lengths, modes, max_curvature, step_size):
         origin_x, origin_y, origin_yaw = p_x[-1], p_y[-1], p_yaw[-1]
 
         current_length = step_size
-        while abs(current_length + step_size) <= abs(length):
+        while abs(current_length) < abs(length):
             p_x, p_y, p_yaw = _interpolate(current_length, mode, max_curvature,
                                            origin_x, origin_y, origin_yaw,
                                            p_x, p_y, p_yaw)

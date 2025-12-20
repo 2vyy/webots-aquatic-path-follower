@@ -1,5 +1,11 @@
 import math
-from my_package.dubins_path_planner import plan_dubins_path
+import sys
+import os
+# Ensure the package directory is in the path so we can import my_package even if not sourced perfectly
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from my_package.hybrid_a_star import plan_hybrid_astar
+from my_package.costmap import Costmap2D
 from my_package.angle import angle_mod
 
 import matplotlib
@@ -8,43 +14,60 @@ import matplotlib.pyplot as plt
 
 class MyRobotDriver():
     def init(self, webots_node, properties):
-        self.robot = webots_node.robot
-        # x, y, heading
-        self.waypoints = [
-            [2.5, 2.5, -math.pi/2.0],
-            [2.0, 2.0, 0.0],
-            [-3, 4, -math.pi/4.0]
-        ]
-        # dubins path constants
-        self.v_max = 0.75
-        self.curvature = 0.5 
-        self.omega_max = self.curvature * self.v_max
-        self.path_step_size = 0.1
-        self.wheel_base = 0.5
-
-        # pure pursuit constants
-        self.Ld = 0.1
-        self.arrival_radius = 0.2
-
-        # states
-        self.last_target_idx = 0
+        try:
+            print("--- MyRobotDriver.init() started ---", flush=True)
+            self.robot = webots_node.robot
+            # x, y, heading
+            self.waypoints = [
+                [3.0, 3.0, 0.0],
+                [-4.0, -2.0, math.pi],
+                [0.0, -6.0, 0.0]
+            ]
         
-        # store computed path
-        self.full_path_x = []
-        self.full_path_y = [] 
-        self.full_path_yaw = []
+            # setup costmap
+            self.costmap = Costmap2D(x_min=-10, x_max=10, z_min=-10, z_max=10, resolution=0.1)
+            
+            # cube
+            self.costmap.add_static_polygon([(0.5, 0.5), (2.0, 0.5), (2.0, 2.0), (0.5, 2.0)])
+            # cylinder approx
+            self.costmap.add_static_polygon([(-1.4, -2.6), (-1.4, -1.4), (-2.6, -1.4), (-2.6, -2.6)])
+            # wall
+            self.costmap.add_static_polygon([(3.24, -2.41), (0.41, -5.24), (0.76, -5.59), (3.59, -2.76)])
+            # dubins path constants
+            self.v_max = 0.75
+            self.curvature = 1.0 
+            self.omega_max = self.curvature * self.v_max
+            self.path_step_size = 0.1
+            self.wheel_base = 0.5
 
-        self.left_prop_motor = self.robot.getDevice('left_prop_motor')
-        self.right_prop_motor = self.robot.getDevice('right_prop_motor')
-        self.left_prop_motor.setPosition(float('inf'))
-        self.right_prop_motor.setPosition(float('inf'))
+            # pure pursuit constants
+            self.Ld = 0.1
+            self.arrival_radius = 0.2
 
-        timestep = int(self.robot.getBasicTimeStep())
-        self.gps = self.robot.getDevice('gps')
-        self.gps.enable(timestep)
-        self.compass = self.robot.getDevice('compass')
-        self.compass.enable(timestep)
-        self.plan_path(0, 0, -math.pi/2) # angle orientation of dubins path graph is different from webots idk
+            # states
+            self.last_target_idx = 0
+            
+            # store computed path
+            self.full_path_x = []
+            self.full_path_y = [] 
+            self.full_path_yaw = []
+
+            self.left_prop_motor = self.robot.getDevice('left_prop_motor')
+            self.right_prop_motor = self.robot.getDevice('right_prop_motor')
+            self.left_prop_motor.setPosition(float('inf'))
+            self.right_prop_motor.setPosition(float('inf'))
+
+            timestep = int(self.robot.getBasicTimeStep())
+            self.gps = self.robot.getDevice('gps')
+            self.gps.enable(timestep)
+            self.compass = self.robot.getDevice('compass')
+            self.compass.enable(timestep)
+            self.plan_path(0, 0, -math.pi/2) # angle orientation of dubins path graph is different from webots idk
+        except Exception as e:
+            print(f"CRITICAL ERROR in MyRobotDriver.init: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            raise e
 
     def step(self):
         # update pose
@@ -93,8 +116,11 @@ class MyRobotDriver():
         self.full_path_y.append(plan_start_y)
         self.full_path_yaw.append(plan_start_yaw)
 
+        self.full_path_yaw.append(plan_start_yaw)
+        
         for i, pose in enumerate(self.waypoints):
             goal_x, goal_y, goal_yaw = pose[0], pose[1], pose[2]
+<<<<<<< HEAD
             print(f"Planning segment {i+1}: from ({plan_start_x:.1f}, {plan_start_y:.1f}) to ({goal_x:.1f}, {goal_y:.1f})")
 
             # for this pair of waypoints, get the dubins path between them and add them ontoo full_plot
@@ -103,7 +129,24 @@ class MyRobotDriver():
                 goal_x, goal_y, goal_yaw,
                 self.curvature,
                 step_size=self.path_step_size
+=======
+            # plan segment
+            print(f"Planning segment {i+1}...", flush=True)
+            path_x, path_y, path_yaw, success = plan_hybrid_astar(
+                plan_start_x, plan_start_y, plan_start_yaw,
+                goal_x, goal_y, goal_yaw,
+                curvature=self.curvature,
+                step_size=self.path_step_size,
+                collision_check_fn=self._check_collision_with_footprint
+>>>>>>> 48f976f (switch to A* with Dubins Path length as heuristic to support obstacles (defined as costmap))
             )
+            
+            if not success:
+                print(f"Warning: Failed to plan segment {i+1}!", flush=True)
+                continue # Skip extending if failed, but this might cause crash later.
+                
+            print(f"Segment {i+1} planned. Length: {len(path_x)}. Start: ({path_x[0]:.2f}, {path_y[0]:.2f}). End: ({path_x[-1]:.2f}, {path_y[-1]:.2f})", flush=True)
+
             # skip first point bc it is the end of the previous path
             self.full_path_x.extend(path_x[1:])
             self.full_path_y.extend(path_y[1:])
@@ -112,8 +155,60 @@ class MyRobotDriver():
             plan_start_x = path_x[-1]
             plan_start_y = path_y[-1]
             plan_start_yaw = path_yaw[-1]
+        
+        if len(self.full_path_x) > 0:
+            print(f"Full path planned. Total nodes: {len(self.full_path_x)}. Final End: ({self.full_path_x[-1]:.2f}, {self.full_path_y[-1]:.2f})", flush=True)
+        else:
+            print("Full path is empty!", flush=True)
+
         self.generate_full_path_visualization()
 
+<<<<<<< HEAD
+=======
+    def get_robot_footprint(self, x, y, yaw):
+        """
+        Returns the 4 corners of the robot's bounding box in world coordinates.
+        Assumed dimensions: Length 0.6m, Width 0.8m
+        """
+        # Half dimensions
+        hl = 0.3
+        hw = 0.4
+        
+        # Local corners
+        corners_local = [
+            (hl, hw),   # Front Left
+            (hl, -hw),  # Front Right
+            (-hl, -hw), # Back Right
+            (-hl, hw)   # Back Left
+        ]
+        
+        corners_world = []
+        c = math.cos(yaw)
+        s = math.sin(yaw)
+        
+        for lx, ly in corners_local:
+            # Rotate and translate
+            wx = x + (lx * c - ly * s)
+            wy = y + (lx * s + ly * c)
+            corners_world.append((wx, wy))
+            
+        return corners_world
+
+    def _check_collision_with_footprint(self, xs, ys, yaws):
+        """
+        Checks if ANY part of the robot footprint collides for ANY point in the trajectory lists.
+        """
+        for x, y, yaw in zip(xs, ys, yaws):
+            corners = self.get_robot_footprint(x, y, yaw)
+            c_xs = [p[0] for p in corners]
+            c_ys = [p[1] for p in corners]
+            
+            # If any corner is in an occupied cell, it's a collision
+            if self.costmap.check_collision(c_xs, c_ys):
+                return True
+        return False
+
+>>>>>>> 48f976f (switch to A* with Dubins Path length as heuristic to support obstacles (defined as costmap))
     def find_target_path_point(self, curr_x, curr_y):
         """
         Finds the next target point on the path for the Pure Pursuit controller.
@@ -208,7 +303,8 @@ class MyRobotDriver():
             ax.spines['bottom'].set_visible(False)
             ax.spines['left'].set_visible(False)
             fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-            image_path = "floor_texture.png"            
+            fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+            image_path = "/home/ivy/Projects/boat_project/floor_texture.png"            
             fig.savefig(image_path, dpi=200, pad_inches=0) 
             plt.close(fig) # Close the specific figure            
             print(f"--- Path visualization saved to {image_path} ---", flush=True)

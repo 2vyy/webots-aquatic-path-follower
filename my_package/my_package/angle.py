@@ -59,7 +59,7 @@ def angle_mod(x, zero_2_2pi=False, degree=False):
     array([300.])
 
     """
-    if isinstance(x, float):
+    if isinstance(x, (float, int)):
         is_float = True
     else:
         is_float = False
