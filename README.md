@@ -1,4 +1,4 @@
-A WeBots project that simulates a two-propeller differential aquatic robot with fluid dynamics. It uses **Hybrid A*** to plan smooth paths around known obstacles (defined in a costmap) and follows them using Pure Pursuit control. Includes real-time Matplotlib visualization.
+A WeBots project that simulates a two-propeller differential aquatic robot with fluid dynamics. It uses a hybrid A* path planner with Dubins Path lengths as a distance heuristic to plan smooth paths around known obstacles (defined in a 2D occupancy grid) and follows them using Pure Pursuit control. Includes real-time Matplotlib visualization.
 
 ![main controller code](https://github.com/2vyy/webots-aquatic-path-follower/blob/main/my_package/my_package/my_robot_driver.py)
 

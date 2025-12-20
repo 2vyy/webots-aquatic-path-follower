@@ -120,16 +120,6 @@ class MyRobotDriver():
         
         for i, pose in enumerate(self.waypoints):
             goal_x, goal_y, goal_yaw = pose[0], pose[1], pose[2]
-<<<<<<< HEAD
-            print(f"Planning segment {i+1}: from ({plan_start_x:.1f}, {plan_start_y:.1f}) to ({goal_x:.1f}, {goal_y:.1f})")
-
-            # for this pair of waypoints, get the dubins path between them and add them ontoo full_plot
-            path_x, path_y, path_yaw, _, _ = plan_dubins_path(
-                plan_start_x, plan_start_y, plan_start_yaw,
-                goal_x, goal_y, goal_yaw,
-                self.curvature,
-                step_size=self.path_step_size
-=======
             # plan segment
             print(f"Planning segment {i+1}...", flush=True)
             path_x, path_y, path_yaw, success = plan_hybrid_astar(
@@ -138,7 +128,6 @@ class MyRobotDriver():
                 curvature=self.curvature,
                 step_size=self.path_step_size,
                 collision_check_fn=self._check_collision_with_footprint
->>>>>>> 48f976f (switch to A* with Dubins Path length as heuristic to support obstacles (defined as costmap))
             )
             
             if not success:
@@ -163,8 +152,6 @@ class MyRobotDriver():
 
         self.generate_full_path_visualization()
 
-<<<<<<< HEAD
-=======
     def get_robot_footprint(self, x, y, yaw):
         """
         Returns the 4 corners of the robot's bounding box in world coordinates.
@@ -208,7 +195,6 @@ class MyRobotDriver():
                 return True
         return False
 
->>>>>>> 48f976f (switch to A* with Dubins Path length as heuristic to support obstacles (defined as costmap))
     def find_target_path_point(self, curr_x, curr_y):
         """
         Finds the next target point on the path for the Pure Pursuit controller.
