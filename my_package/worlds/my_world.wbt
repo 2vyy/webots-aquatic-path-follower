@@ -16,17 +16,18 @@ TexturedBackgroundLight {
 }
 RectangleArena {
   wallHeight 0.5
-  floorSize 18 18
+  floorSize 20 20
 }
 Fluid {
   translation 0 0 0
+  streamVelocity 0 0 0
   children [
     DEF pool Shape {
       appearance PBRAppearance {
         transparency 0.5
       }
       geometry Box {
-        size 18 18 0.5
+        size 20 20 0.5
       }
     }
   ]
@@ -38,37 +39,43 @@ Transform {
   children [
     Shape {
       appearance PBRAppearance {
-        baseColorMap ImageTexture {
-          url [ "../../../../../floor_texture.png" ]
-        }
+        baseColor 0.2 0.2 0.2
         roughness 1.0
         metalness 0.0
       }
       geometry Box {
-        size 18 18 0.01
+        size 20 20 0.01
       }
     }
   ]
 }
 Solid {
-  translation 1.25 1.25 0.5
+  translation 3.0 1.5 0.5
   children [
-    DEF OBSTACLE_SHAPE Shape {
+    DEF OBSTACLE_BOX Shape {
       appearance PBRAppearance {
         baseColor 0.8 0.2 0.2
         roughness 0.3
         metalness 0
       }
       geometry Box {
-        size 1.5 1.5 1
+        size 1.0 1.0 2.0
       }
     }
   ]
-  name "static_obstacle"
-  boundingObject USE OBSTACLE_SHAPE
+  name "gate_left"
+  boundingObject USE OBSTACLE_BOX
 }
 Solid {
-  translation -2.0 -2.0 0.5
+  translation 3.0 -1.5 0.5
+  children [
+    USE OBSTACLE_BOX
+  ]
+  name "gate_right"
+  boundingObject USE OBSTACLE_BOX
+}
+Solid {
+  translation 5.0 0.0 0.5
   children [
     DEF OBSTACLE_CYLINDER Shape {
       appearance PBRAppearance {
@@ -77,17 +84,16 @@ Solid {
         metalness 0
       }
       geometry Cylinder {
-        height 1.0
+        height 2.0
         radius 0.5
       }
     }
   ]
-  name "obstacle_cylinder"
+  name "center_pillar"
   boundingObject USE OBSTACLE_CYLINDER
 }
 Solid {
-  translation 2.0 -4.0 0.5
-  rotation 0 0 1 0.785398
+  translation 7.0 0.0 0.5
   children [
     DEF OBSTACLE_WALL Shape {
       appearance PBRAppearance {
@@ -96,23 +102,24 @@ Solid {
         metalness 0
       }
       geometry Box {
-        size 4.0 0.5 1.0
+        size 1.0 10.0 2.0
       }
     }
   ]
-  name "obstacle_wall"
+  name "back_wall"
   boundingObject USE OBSTACLE_WALL
 }
 Robot {
   name "my_robot"
   controller "<extern>"
-  translation 0 0 0.25
-  rotation 0 0.7 0.7 3.14
+  translation 0 0 0.3
+  rotation .577 -.577 -.577 2.09
   immersionProperties [
     DEF Board_Imm ImmersionProperties {
       fluidName "fluid"
-      viscousResistanceForceCoefficient 3 # was 3
-      viscousResistanceTorqueCoefficient 1 # was 1
+      dragForceCoefficients 0.5 0.5 0.1
+      viscousResistanceForceCoefficient 3
+      viscousResistanceTorqueCoefficient 2000
     }
   ]
   children [
@@ -134,22 +141,22 @@ Robot {
     }
     # Left wing
     Transform {
-      translation -0.25 0 0.05
-      children [
+      translation -0.15 0 0.05
+      children [  
         Shape {
           appearance PBRAppearance {
             baseColor 0.5 0.5 0.5
             roughness 0.5
           }
           geometry Box {
-            size 0.3 0.05 0.05
+            size 0.2 0.05 0.05
           }
         }
       ]
     }
     # Right wing
     Transform {
-      translation 0.25 0 0.05
+      translation 0.15 0 0.05
       children [
         Shape {
           appearance PBRAppearance {
@@ -157,7 +164,7 @@ Robot {
             roughness 0.5
           }
           geometry Box {
-            size 0.3 0.05 0.05
+            size 0.2 0.05 0.05
           }
         }
       ]
@@ -238,26 +245,63 @@ Robot {
     Compass {
       name "compass"
     }
+    Lidar {
+      translation 0 -.15 0
+      rotation 1 0 0 -1.5708
+      name "lidar"
+      horizontalResolution 360
+      fieldOfView 6.28319
+      numberOfLayers 1
+      minRange 0.35
+      maxRange 30.0
+      type "fixed"
+    }
   ]
-  boundingObject Transform {
-    translation 0 0 0.05
+  boundingObject Group {
     children [
-      Shape {
-        geometry Capsule {
-          radius 0.1
-          height 0.5
-        }
+      # Main body
+      Transform {
+        translation 0 0 0.05
+        children [
+          Shape {
+            geometry Capsule {
+              radius 0.1
+              height 0.5
+            }
+          }
+        ]
+      }
+      # Left wing
+      Transform {
+        translation -0.15 0 0.05
+        children [
+          Shape {
+            geometry Box {
+              size 0.2 0.05 0.05
+            }
+          }
+        ]
+      }
+      # Right wing
+      Transform {
+        translation 0.15 0 0.05
+        children [
+          Shape {
+            geometry Box {
+              size 0.2 0.05 0.05
+            }
+          }
+        ]
       }
     ]
   }
   physics Physics {
-    density 500           # Less than water (1000 kg/m^3), so it floats (was 500)
-    mass -1               # Let Webots compute mass from density and geometry
-    centerOfMass [ ]      # Leave empty for automatic calculation
-    inertiaMatrix [ ]     # Leave empty for automatic calculation
+    density 500
+    centerOfMass [0 0 0.05]
+    inertiaMatrix [ ]
     damping Damping {
-      linear 0.5          # Simulates water drag (higher = more resistance) (was 0.5)
-      angular 0.5         # Simulates rotational drag (prevents rolling) (was 0.5)
+      linear 0.5
+      angular 1.0
     }
   }
 }

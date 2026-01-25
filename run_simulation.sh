@@ -1,6 +1,9 @@
 #!/bin/bash
 # run_simulation.sh
 
+pkill webots-bin
+sleep 1
+
 echo "Sourcing ROS Iron..."
 source /opt/ros/iron/setup.bash
 

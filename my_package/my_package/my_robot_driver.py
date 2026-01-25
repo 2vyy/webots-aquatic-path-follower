@@ -1,73 +1,90 @@
+import numpy as np
 import math
+import time
 import sys
 import os
+from my_package.costmap_visualizer import CostmapVisualizer
+from controller import Robot, Motor, Lidar, GPS, Compass
 # Ensure the package directory is in the path so we can import my_package even if not sourced perfectly
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from my_package.hybrid_a_star import plan_hybrid_astar
+from my_package.hybrid_a_star import HybridAStarPlanner
 from my_package.costmap import Costmap2D
 from my_package.angle import angle_mod
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
 class MyRobotDriver():
     def init(self, webots_node, properties):
-        try:
-            print("--- MyRobotDriver.init() started ---", flush=True)
-            self.robot = webots_node.robot
-            # x, y, heading
-            self.waypoints = [
-                [3.0, 3.0, 0.0],
-                [-4.0, -2.0, math.pi],
-                [0.0, -6.0, 0.0]
-            ]
-        
-            # setup costmap
-            self.costmap = Costmap2D(x_min=-10, x_max=10, z_min=-10, z_max=10, resolution=0.1)
-            
-            # cube
-            self.costmap.add_static_polygon([(0.5, 0.5), (2.0, 0.5), (2.0, 2.0), (0.5, 2.0)])
-            # cylinder approx
-            self.costmap.add_static_polygon([(-1.4, -2.6), (-1.4, -1.4), (-2.6, -1.4), (-2.6, -2.6)])
-            # wall
-            self.costmap.add_static_polygon([(3.24, -2.41), (0.41, -5.24), (0.76, -5.59), (3.59, -2.76)])
-            # dubins path constants
-            self.v_max = 0.75
-            self.curvature = 1.0 
-            self.omega_max = self.curvature * self.v_max
-            self.path_step_size = 0.1
-            self.wheel_base = 0.5
+        self.robot = webots_node.robot
+        # x, y, heading
+        self.waypoints = [
+            [5.0, 2.0, 0.0],  # Pass Gate, go Left of Pillar
+            [5.0, -2.0, math.pi], # Go Right of Pillar
+            [0.0, 0.0, math.pi]   # Reverse to Start
+        ]
+        # setup costmap
+        self.costmap = Costmap2D(x_min=-12, x_max=12, z_min=-12, z_max=12, resolution=0.1)
+        self.visualizer = CostmapVisualizer(self.costmap, scale=4)
+        # dubins/RS path constants
+        self.v_max = 2.0
+        self.curvature = 1.5
+        self.omega_max = self.curvature * self.v_max
+        self.path_step_size = 0.2
+        self.wheel_base = 0.5
+        # pure pursuit constants
+        self.Ld_base = 0.3
+        self.arrival_radius = 0.2
+        # states
+        self.last_target_idx = 0
+        self.current_waypoint_idx = 0
+        # store computed path
+        self.full_path_x = []
+        self.full_path_y = []
+        self.full_path_yaw = []
+        self.full_path_dir = []
+        self.left_prop_motor = self.robot.getDevice('left_prop_motor')
+        self.right_prop_motor = self.robot.getDevice('right_prop_motor')
+        self.left_prop_motor.setPosition(float('inf'))
+        self.right_prop_motor.setPosition(float('inf'))
+        self.left_prop_motor.setVelocity(0.0)
+        self.right_prop_motor.setVelocity(0.0)
+        timestep = int(self.robot.getBasicTimeStep())
+        self.gps = self.robot.getDevice('gps')
+        self.gps.enable(timestep)
+        self.compass = self.robot.getDevice('compass')
+        self.compass.enable(timestep)
+        # Lidar Init
+        self.lidar = self.robot.getDevice('lidar')
+        self.lidar.enable(timestep)
+        # Pre-compute lidar angle array
+        self.lidar_res = self.lidar.getHorizontalResolution()
+        self.lidar_fov = self.lidar.getFov()
+        indices = np.arange(self.lidar_res)
+        self.lidar_angles = self.lidar_fov/2 - (indices / self.lidar_res) * self.lidar_fov
+        # State
+        self.startup_steps = 0
+        self.startup_duration = 50  # Wait 50 steps before first plan
+        # Current Lidar frame for visualization
+        self.current_lidar_xs = np.array([])
+        self.current_lidar_ys = np.array([])
+        # Trajectory history for visualization
+        self.trajectory_x = []
+        self.trajectory_y = []
+        self.planner = HybridAStarPlanner(
+            curvature=self.curvature,
+            step_size=self.path_step_size,
+            grid_resolution=0.2,
+            collision_check_fn=self._check_collision_with_footprint
+        )
 
-            # pure pursuit constants
-            self.Ld = 0.1
-            self.arrival_radius = 0.2
+    def visualize_now(self, cx, cy, cyaw):
+        self.step_counter = getattr(self, 'step_counter', 0)
+        if self.step_counter % 20 != 0:
+            return
 
-            # states
-            self.last_target_idx = 0
-            
-            # store computed path
-            self.full_path_x = []
-            self.full_path_y = [] 
-            self.full_path_yaw = []
-
-            self.left_prop_motor = self.robot.getDevice('left_prop_motor')
-            self.right_prop_motor = self.robot.getDevice('right_prop_motor')
-            self.left_prop_motor.setPosition(float('inf'))
-            self.right_prop_motor.setPosition(float('inf'))
-
-            timestep = int(self.robot.getBasicTimeStep())
-            self.gps = self.robot.getDevice('gps')
-            self.gps.enable(timestep)
-            self.compass = self.robot.getDevice('compass')
-            self.compass.enable(timestep)
-            self.plan_path(0, 0, -math.pi/2) # angle orientation of dubins path graph is different from webots idk
-        except Exception as e:
-            print(f"CRITICAL ERROR in MyRobotDriver.init: {e}", flush=True)
-            import traceback
-            traceback.print_exc()
-            raise e
+        lidar_pts = np.column_stack((self.current_lidar_xs, self.current_lidar_ys)) if len(self.current_lidar_xs) > 0 else None
+        path_pts = (self.full_path_x, self.full_path_y) if len(self.full_path_x) > 0 else None
+        traj_pts = (self.trajectory_x, self.trajectory_y) if len(self.trajectory_x) > 1 else None
+        self.visualizer.show((cx, cy, cyaw), lidar_pts, path_pts, traj_pts, self.waypoints)
 
     def step(self):
         # update pose
@@ -75,106 +92,261 @@ class MyRobotDriver():
         curr_x = gps_values[0]
         curr_y = gps_values[1]
         compass_values = self.compass.getValues()
-        curr_yaw = angle_mod(math.atan2(compass_values[0], compass_values[2]))
+        raw_yaw = math.atan2(compass_values[0], -compass_values[2])
+        curr_yaw = angle_mod(raw_yaw + math.pi/2)
+        # Track Trajectory for Visualization
+        self.trajectory_x.append(curr_x)
+        self.trajectory_y.append(curr_y)
+        # Lidar Update & Mapping
+        ranges = np.array(self.lidar.getRangeImage())
+        min_r = self.lidar.getMinRange()
+        max_r = self.lidar.getMaxRange()
         
-        # pure pursuit implementation
-        # find closest point on path, get angle and dist displacement to it 
-        (target_idx, target_x, target_y) = self.find_target_path_point(curr_x, curr_y) 
+        # 1. Identify Valid Hits (Obstacles)
+        # finite and within range
+        hit_mask = (ranges > min_r) & (ranges < max_r) & np.isfinite(ranges)
+        
+        # 2. Identify Clearing Rays (Free Space)
+        # clamp them to max_range or inf for ray casting.
+        clearing_mask = (ranges >= max_r) | np.isinf(ranges)
+        
+        # 3. Combine both for processing
+        # mask of all rays we want to use (hits + clearing)
+        process_mask = hit_mask | clearing_mask
+        
+        self.current_lidar_xs = np.array([])
+        self.current_lidar_ys = np.array([])
+        
+        if np.any(process_mask):
+            # Recalculate angles if needed
+            if len(self.lidar_angles) != len(ranges):
+                indices = np.arange(len(ranges))
+                self.lidar_angles = self.lidar_fov/2 - (indices / len(ranges)) * self.lidar_fov
+            
+            # Select data
+            proc_ranges = ranges[process_mask]
+            proc_angles = self.lidar_angles[process_mask]
+            
+            # Clamp ranges for clearing rays to max_r (or slightly less to be safe?)
+            # max_r is usually the sensor limit. Ray casting to max_r is fine.
+            # However, proc_ranges currently contains 'inf' for clearing rays.
+            # We must replace inf/large values with max_r.
+            proc_ranges = np.minimum(proc_ranges, max_r)
+            
+            # Transform to World
+            angles_world = curr_yaw - math.pi/2 + proc_angles
+            xs = curr_x + proc_ranges * np.cos(angles_world)
+            ys = curr_y + proc_ranges * np.sin(angles_world)
+            
+            # Store ONLY HITS for visualization (don't clutter view with max range points)
+            self.current_lidar_xs = xs[hit_mask[process_mask]]
+            self.current_lidar_ys = ys[hit_mask[process_mask]]
+            
+            self.step_counter = getattr(self, 'step_counter', 0)
+            self.step_counter += 1
+            
+            if self.step_counter % 5 == 0:
+                # Pass numpy array directly (N, 2)
+                world_points = np.column_stack((xs, ys))
+                robot_pose = (curr_x, curr_y, curr_yaw)
+                self.costmap.update_from_lidar(robot_pose, world_points)
+        if self.step_counter % 10 == 0:
+            self.costmap.clean_noise()
 
-        # check if at final point (done?)
-        final_x = self.full_path_x[-1]
-        final_y = self.full_path_y[-1]
-        dist_to_end = math.sqrt((curr_x - final_x)**2 + (curr_y - final_y)**2)
-        if dist_to_end < self.arrival_radius:
-            print(f"*** Reached End of Path ***")
+        # Startup Phase
+        if self.startup_steps < self.startup_duration:
+            self.left_prop_motor.setVelocity(0.0)
+            self.right_prop_motor.setVelocity(0.0)
+            self.startup_steps += 1
+            if self.startup_steps == self.startup_duration:
+                print("Startup complete. Planning...", flush=True)
+                self.costmap.inflate()
+                self.plan_to_current_waypoint(curr_x, curr_y, curr_yaw)
+            return
+        # Path Following (Pure Pursuit)
+        if len(self.full_path_x) < 2:
             self.left_prop_motor.setVelocity(0.0)
             self.right_prop_motor.setVelocity(0.0)
             return
+        # Check if reached current waypoint
+        current_wp = self.waypoints[self.current_waypoint_idx]
+        dist_to_wp = math.sqrt((curr_x - current_wp[0])**2 + (curr_y - current_wp[1])**2)
+        if dist_to_wp < self.arrival_radius:
+            print(f"*** Reached Waypoint {self.current_waypoint_idx + 1} ***", flush=True)
+            self.current_waypoint_idx += 1
+            if self.current_waypoint_idx >= len(self.waypoints):
+                print("*** Finished ***", flush=True)
+                self.left_prop_motor.setVelocity(0.0)
+                self.right_prop_motor.setVelocity(0.0)
+                return
+            self.plan_to_current_waypoint(curr_x, curr_y, curr_yaw)
+            return
+        # Find target point
+        (target_idx, target_x, target_y, stop_at_cusp) = self.find_target_path_point(curr_x, curr_y)
+        # Gear
+        desired_gear = 1
+        if target_idx < len(self.full_path_dir):
+            desired_gear = self.full_path_dir[target_idx]
+        # Slow down if approaching cusp
+        target_vel = self.v_max
+        dist_to_target = math.sqrt((curr_x - target_x)**2 + (curr_y - target_y)**2)
+        if stop_at_cusp:
+            target_vel = max(0.1, min(self.v_max, dist_to_target))
+            # CUSP SWITCHING LOGIC
+            if dist_to_target < 0.15: # Close enough to switch
+                # Force jump to next segment by advancing index
+                # This makes find_target_path_point pick up the NEW gear next step
+                self.last_target_idx = target_idx + 1
+                self.left_prop_motor.setVelocity(0.0)
+                self.right_prop_motor.setVelocity(0.0)
+                return # Skip this step to settle
+        # Pure Pursuit
+        target_angle = math.atan2(target_y - curr_y, target_x - curr_x)
+        if desired_gear == -1:
+            target_angle = angle_mod(target_angle + math.pi)
+        angle_error = angle_mod(target_angle - curr_yaw)
+        omega_desired = (target_vel * 2.0 * math.sin(angle_error)) / self.Ld_base
+        omega_clamp = max(-self.omega_max, min(self.omega_max, omega_desired))
+        left_vel = target_vel - omega_clamp * self.wheel_base
+        right_vel = target_vel + omega_clamp * self.wheel_base
+        if desired_gear == -1:
+            left_vel, right_vel = -right_vel, -left_vel
+        self.left_prop_motor.setVelocity(left_vel)
+        self.right_prop_motor.setVelocity(right_vel)
+        self.telemetry_counter = getattr(self, 'telemetry_counter', 0) + 1
+        if self.telemetry_counter % 20 == 0:
+            print(f"[CTRL] pos:({curr_x:.2f},{curr_y:.2f}) err:{math.degrees(angle_error):.0f}° val:{target_vel:.1f}", flush=True)
+        # Visualization
+        self.visualize_now(curr_x, curr_y, curr_yaw)
 
-        angle_error = angle_mod(math.atan2(target_x - curr_x, target_y - curr_y) - curr_yaw)
-        dist = math.sqrt((curr_x - target_x)**2 + (curr_y - target_y)**2)
-
-        # get required angular velocity
-        omega = (self.v_max * math.sin(angle_error)) / dist
-        omega_clamp = max(-self.omega_max, min(self.omega_max, omega))
-        self.left_prop_motor.setVelocity(self.v_max - omega_clamp * self.wheel_base)
-        self.right_prop_motor.setVelocity(self.v_max + omega_clamp * self.wheel_base)
-        
-        print(f"Pose: (x:{curr_x:.2f}, y:{curr_y:.2f}, yaw:{math.degrees(curr_yaw):.1f}°) | "
-              f"Target: (idx:{target_idx}, x:{target_x:.2f}, y:{target_y:.2f}) | "
-              f"Angle Error: {math.degrees(angle_error):.1f}° | "
-              f"Omega: {omega_clamp:.2f}", flush=True)
-
-    def plan_path(self, plan_start_x, plan_start_y, plan_start_yaw):
-        """
-        Generates the full path by combining together Dubins paths
-        from the robot's start pose to each subsequent waypoint.
-        """
-        print("--- Planning full route ---", flush=True)
-
-        self.full_path_x.append(plan_start_x)
-        self.full_path_y.append(plan_start_y)
-        self.full_path_yaw.append(plan_start_yaw)
-
-        self.full_path_yaw.append(plan_start_yaw)
-        
-        for i, pose in enumerate(self.waypoints):
-            goal_x, goal_y, goal_yaw = pose[0], pose[1], pose[2]
-            # plan segment
-            print(f"Planning segment {i+1}...", flush=True)
-            path_x, path_y, path_yaw, success = plan_hybrid_astar(
-                plan_start_x, plan_start_y, plan_start_yaw,
-                goal_x, goal_y, goal_yaw,
-                curvature=self.curvature,
-                step_size=self.path_step_size,
-                collision_check_fn=self._check_collision_with_footprint
-            )
+    def plan_to_current_waypoint(self, start_x, start_y, start_yaw):
+        if self.current_waypoint_idx >= len(self.waypoints):
+            return False
             
-            if not success:
-                print(f"Warning: Failed to plan segment {i+1}!", flush=True)
-                continue # Skip extending if failed, but this might cause crash later.
-                
-            print(f"Segment {i+1} planned. Length: {len(path_x)}. Start: ({path_x[0]:.2f}, {path_y[0]:.2f}). End: ({path_x[-1]:.2f}, {path_y[-1]:.2f})", flush=True)
-
-            # skip first point bc it is the end of the previous path
-            self.full_path_x.extend(path_x[1:])
-            self.full_path_y.extend(path_y[1:])
-            self.full_path_yaw.extend(path_yaw[1:])
-            # set new start of next path
-            plan_start_x = path_x[-1]
-            plan_start_y = path_y[-1]
-            plan_start_yaw = path_yaw[-1]
+        goal = self.waypoints[self.current_waypoint_idx]
+        goal_x, goal_y, goal_yaw = goal[0], goal[1], goal[2]
         
-        if len(self.full_path_x) > 0:
-            print(f"Full path planned. Total nodes: {len(self.full_path_x)}. Final End: ({self.full_path_x[-1]:.2f}, {self.full_path_y[-1]:.2f})", flush=True)
+        path_x, path_y, path_yaw, path_dir, success = self.planner.plan(
+            start_x, start_y, start_yaw,
+            goal_x, goal_y, goal_yaw
+        )
+        
+        if success:
+             # Convert to numpy arrays for fast vectorization
+             self.full_path_x = np.array(path_x)
+             self.full_path_y = np.array(path_y)
+             self.full_path_yaw = np.array(path_yaw)
+             self.full_path_dir = np.array(path_dir)
+             self.last_target_idx = 0
+             return True
         else:
-            print("Full path is empty!", flush=True)
+             print(f"Failed to plan to waypoint {self.current_waypoint_idx+1}", flush=True)
+             return False
 
-        self.generate_full_path_visualization()
+    def find_target_path_point(self, curr_x, curr_y):
+        """
+        finds the lookahead point for pure pursuit. 
+        handles gear changes (cusps) by stopping before switching direction.
+        """
+        # optimized with numpy vectorization
+        if len(self.full_path_x) == 0:
+            return 0, 0, 0, False
+
+        # 1. find closest point on the path to the robot
+        # only search a small window ahead to ensure efficient progress
+        search_window = 50
+        search_start = self.last_target_idx
+        search_end = min(self.last_target_idx + search_window, len(self.full_path_x))
+        
+        # slice the arrays for the search window
+        dx = self.full_path_x[search_start:search_end] - curr_x
+        dy = self.full_path_y[search_start:search_end] - curr_y
+        dists_sq = dx**2 + dy**2
+        
+        # find index of minimum distance within the slice
+        min_idx_in_slice = np.argmin(dists_sq)
+        closest_idx = search_start + min_idx_in_slice
+        
+        # 2. identify the current gear (direction of motion)
+        current_gear = self.full_path_dir[closest_idx]
+        
+        # 3. find target point (fixed lookahead) on the remaining path
+        # we start searching from the closest point onwards
+        search_slice_x = self.full_path_x[closest_idx:]
+        search_slice_y = self.full_path_y[closest_idx:]
+        search_slice_dir = self.full_path_dir[closest_idx:]
+        
+        dx = search_slice_x - curr_x
+        dy = search_slice_y - curr_y
+        dists = np.sqrt(dx**2 + dy**2)
+        
+        # find first index where distance >= lookahead distance
+        mask = dists >= self.Ld_base
+        
+        target_idx = len(self.full_path_x) - 1 # default to end of path
+        stop_at_cusp = False
+        
+        # check for gear change (cusp) ahead
+        # we cannot look ahead past a gear switch because the robot needs to stop first
+        gear_changes = np.where(search_slice_dir != current_gear)[0]
+        
+        limit_idx = len(search_slice_x) # relative to closest_idx
+        
+        if len(gear_changes) > 0:
+            # constraint: lookahead must stop before the gear change
+            limit_idx = gear_changes[0]
+            # flag that we are constrained by a cusp
+            stop_at_cusp = True
+            
+        # Find valid lookahead points WITHIN the same gear
+        valid_lookaheads = np.where(mask[:limit_idx])[0]
+        
+        if len(valid_lookaheads) > 0:
+            # found a valid point far enough ahead and before any gear switch
+            slide_idx = valid_lookaheads[0]
+            target_idx = closest_idx + slide_idx
+        elif stop_at_cusp:
+            # if constrained by a cusp and no far point found, aim for the cusp itself.
+            # safe fallback: aim for the point just before the gear change.
+            target_idx = closest_idx + limit_idx - 1
+            if target_idx < closest_idx: target_idx = closest_idx
+        else:
+            # no gear switch, but also no point far enough (approaching end of path)
+            target_idx = len(self.full_path_x) - 1
+            
+        self.last_target_idx = closest_idx
+        return target_idx, self.full_path_x[target_idx], self.full_path_y[target_idx], stop_at_cusp
 
     def get_robot_footprint(self, x, y, yaw):
-        """
-        Returns the 4 corners of the robot's bounding box in world coordinates.
-        Assumed dimensions: Length 0.6m, Width 0.8m
-        """
-        # Half dimensions
         hl = 0.3
         hw = 0.4
         
-        # Local corners
-        corners_local = [
-            (hl, hw),   # Front Left
-            (hl, -hw),  # Front Right
-            (-hl, -hw), # Back Right
-            (-hl, hw)   # Back Left
-        ]
+        # Determine sampling to ensure we don't skip obstacles > 0.1m
+        res = 0.1
+        n_w = int(math.ceil(2 * hw / res))
+        n_l = int(math.ceil(2 * hl / res))
         
-        corners_world = []
+        # Generate local points (cache this if performance becomes an issue)
+        local_pts = []
+        
+        # Front and Back edges (x is constant hl/-hl)
+        ys = np.linspace(-hw, hw, n_w + 1)
+        for yi in ys:
+            local_pts.append((hl, yi))   # Front
+            local_pts.append((-hl, yi))  # Back
+            
+        # Left and Right edges (y is constant hw/-hw)
+        xs = np.linspace(-hl, hl, n_l + 1)
+        for xi in xs:
+            local_pts.append((xi, hw))   # Left
+            local_pts.append((xi, -hw))  # Right
+            
+        # Transform to world coordinates
         c = math.cos(yaw)
         s = math.sin(yaw)
         
-        for lx, ly in corners_local:
-            # Rotate and translate
+        corners_world = []
+        for lx, ly in local_pts:
             wx = x + (lx * c - ly * s)
             wy = y + (lx * s + ly * c)
             corners_world.append((wx, wy))
@@ -182,117 +354,10 @@ class MyRobotDriver():
         return corners_world
 
     def _check_collision_with_footprint(self, xs, ys, yaws):
-        """
-        Checks if ANY part of the robot footprint collides for ANY point in the trajectory lists.
-        """
         for x, y, yaw in zip(xs, ys, yaws):
             corners = self.get_robot_footprint(x, y, yaw)
             c_xs = [p[0] for p in corners]
             c_ys = [p[1] for p in corners]
-            
-            # If any corner is in an occupied cell, it's a collision
             if self.costmap.check_collision(c_xs, c_ys):
                 return True
         return False
-
-    def find_target_path_point(self, curr_x, curr_y):
-        """
-        Finds the next target point on the path for the Pure Pursuit controller.
-        
-        - Find the path point *closest* to the robot.
-        - From that closest point, search *forward* until a point is
-           found that is at least `Ld` (lookahead distance) away.
-        """
-        closest_dist = float('inf')
-        closest_idx = self.last_target_idx
-        # start from last known index
-        for i in range(self.last_target_idx, len(self.full_path_x)):
-            dx = curr_x - self.full_path_x[i]
-            dy = curr_y - self.full_path_y[i]
-            dist = math.sqrt(dx*dx + dy*dy)
-            if dist < closest_dist:
-                closest_dist = dist
-                closest_idx = i
-            else:
-                # if distance in increasing, there is no point checking more points
-                break
-        # search forward from found closest point for the lookahead target
-        target_idx = closest_idx
-        for i in range(closest_idx, len(self.full_path_x)):
-            dx = curr_x - self.full_path_x[i]
-            dy = curr_y - self.full_path_y[i]
-            dist = math.sqrt(dx*dx + dy*dy)
-            if dist >= self.Ld:
-                target_idx = i
-                break
-        else:
-            # resort to last point of path if no other choice
-            target_idx = len(self.full_path_x) - 1
-        
-        self.last_target_idx = target_idx
-        target_x = self.full_path_x[target_idx]
-        target_y = self.full_path_y[target_idx]
-        return target_idx, target_x, target_y
-    
-    # these are for generating the graph of the planned path
-    # (you do have to run the program twice if you make a change to the computed path for it to render in webots)
-    def _plot_arrow(self, ax, x, y, yaw, length=0.5, width=0.1, fc="r", ec="k"):
-        if not isinstance(x, (float, int)): x = x[0]
-        if not isinstance(y, (float, int)): y = y[0]
-        if not isinstance(yaw, (float, int)): yaw = yaw[0]
-        ax.arrow(x, y,
-                 length * math.cos(yaw), length * math.sin(yaw),
-                 fc=fc, ec=ec, head_width=width, head_length=width, zorder=5)
-        ax.plot(x, y, 'o', color=fc, markersize=5, zorder=5) # Add a dot
-
-    def generate_full_path_visualization(self):
-        try:
-            print("--- Generating full path visualization... ---", flush=True)
-            fig, ax = plt.subplots(figsize=(8, 8)) 
-            ax.set_xlim(-6, 6)
-            ax.set_ylim(-6, 6)
-            ax.set_aspect('equal')
-            ax.grid(True, zorder=0, linestyle=':', color='gray')
-            ax.plot(self.full_path_x, self.full_path_y, "b--", zorder=2, label="Planned Path")
-            label_every_n_points = 2 
-            for i in range(len(self.full_path_x)):
-                if i > 0 and i % label_every_n_points == 0:
-                    x = self.full_path_x[i]
-                    y = self.full_path_y[i]
-                    ax.plot(x, y, 'o', color='#00008B', markersize=3, zorder=3) # Dark blue dot                    
-                    ax.text(x, y + 0.15, str(i), ha='center', va='bottom', 
-                            fontsize=7, color='black', zorder=6)
-            start_x = self.full_path_x[0]
-            start_y = self.full_path_y[0]
-            self._plot_arrow(ax, start_x, start_y, 
-                             self.full_path_yaw[0], fc='g') # Green for start
-            ax.text(start_x, start_y + 0.2, "Start (Idx 0)", ha='center', va='bottom', 
-                    fontsize=9, color='g', zorder=6)
-            for i, pose in enumerate(self.waypoints):
-                x, y, yaw = pose[0], pose[1], pose[2]
-                self._plot_arrow(ax, x, y, yaw, fc='r')
-                ax.text(x + 0.3, y, f"Goal {i}", ha='center', va='bottom', 
-                        fontsize=9, color='r', zorder=6)
-            ax.text(0, -5.8, "X coordinate", 
-                    ha='center', va='bottom', fontsize=10, zorder=10)
-            ax.text(-5.8, 0, "Y coordinate", 
-                    ha='left', va='center', rotation=90, fontsize=10, zorder=10)
-            ticks = [-9, -8, -7, -6, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9] # Skip 0
-            ax.set_xticks(ticks)
-            ax.set_yticks(ticks)
-            ax.tick_params(axis='x', which='both', length=0, pad=-14, colors='gray', labelsize=8)
-            ax.tick_params(axis='y', which='both', length=0, pad=-14, colors='gray', labelsize=8)
-            ax.set_xlabel(None)
-            ax.set_ylabel(None)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['bottom'].set_visible(False)
-            ax.spines['left'].set_visible(False)
-            fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-            fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-            image_path = "/home/ivy/Projects/boat_project/floor_texture.png"            
-            fig.savefig(image_path, dpi=200, pad_inches=0) 
-            plt.close(fig) # Close the specific figure            
-            print(f"--- Path visualization saved to {image_path} ---", flush=True)
-        except Exception as e:
-            print(f"Error generating path visualization: {e}", flush=True)
