@@ -17,9 +17,7 @@ class MyRobotDriver():
         self.robot = webots_node.robot
         # x, y, heading
         self.waypoints = [
-            [5.0, 2.0, 0.0],  # Pass Gate, go Left of Pillar
-            [5.0, -2.0, math.pi], # Go Right of Pillar
-            [0.0, 0.0, math.pi]   # Reverse to Start
+            [8.0, 0.0, 0.0]
         ]
         # setup costmap
         self.costmap = Costmap2D(x_min=-12, x_max=12, z_min=-12, z_max=12, resolution=0.1)
@@ -32,7 +30,7 @@ class MyRobotDriver():
         self.wheel_base = 0.5
         # pure pursuit constants
         self.Ld_base = 0.3
-        self.arrival_radius = 0.2
+        self.arrival_radius = 0.3
         # states
         self.last_target_idx = 0
         self.current_waypoint_idx = 0
@@ -63,6 +61,8 @@ class MyRobotDriver():
         # State
         self.startup_steps = 0
         self.startup_duration = 50  # Wait 50 steps before first plan
+        self.replanning_timer = 0   # Timer for stopping before replan
+        self.cusp_timer = 0         # Timer for stopping at cusps
         # Current Lidar frame for visualization
         self.current_lidar_xs = np.array([])
         self.current_lidar_ys = np.array([])
@@ -75,6 +75,23 @@ class MyRobotDriver():
             grid_resolution=0.2,
             collision_check_fn=self._check_collision_with_footprint
         )
+        self._footprint_offsets = self._precompute_footprint_offsets()
+
+    def _precompute_footprint_offsets(self):
+        hl = 0.25  # Increased for sensitivity
+        hw = 0.35  # Increased for sensitivity
+        res = 0.1 # Check every 10cm inside the robot
+        
+        xs = np.arange(-hl, hl + 0.001, res)
+        ys = np.arange(-hw, hw + 0.001, res)
+        
+        # Create a grid of points (filled rectangle)
+        grid_x, grid_y = np.meshgrid(xs, ys)
+        
+        # Flatten to list of (x, y) tuples or just array
+        # We need array (N, 2)
+        pts = np.column_stack((grid_x.ravel(), grid_y.ravel()))
+        return pts
 
     def visualize_now(self, cx, cy, cyaw):
         self.step_counter = getattr(self, 'step_counter', 0)
@@ -102,16 +119,13 @@ class MyRobotDriver():
         min_r = self.lidar.getMinRange()
         max_r = self.lidar.getMaxRange()
         
-        # 1. Identify Valid Hits (Obstacles)
-        # finite and within range
+        # identify valid hits (obstacles)
         hit_mask = (ranges > min_r) & (ranges < max_r) & np.isfinite(ranges)
         
-        # 2. Identify Clearing Rays (Free Space)
-        # clamp them to max_range or inf for ray casting.
+        # identify clearing rays (free space)
         clearing_mask = (ranges >= max_r) | np.isinf(ranges)
         
-        # 3. Combine both for processing
-        # mask of all rays we want to use (hits + clearing)
+        # combine both for processing
         process_mask = hit_mask | clearing_mask
         
         self.current_lidar_xs = np.array([])
@@ -127,18 +141,15 @@ class MyRobotDriver():
             proc_ranges = ranges[process_mask]
             proc_angles = self.lidar_angles[process_mask]
             
-            # Clamp ranges for clearing rays to max_r (or slightly less to be safe?)
-            # max_r is usually the sensor limit. Ray casting to max_r is fine.
-            # However, proc_ranges currently contains 'inf' for clearing rays.
-            # We must replace inf/large values with max_r.
+            # clamp ranges for clearing rays to max_r (or slightly less to be safe?)
             proc_ranges = np.minimum(proc_ranges, max_r)
             
-            # Transform to World
+            # transform to world
             angles_world = curr_yaw - math.pi/2 + proc_angles
             xs = curr_x + proc_ranges * np.cos(angles_world)
             ys = curr_y + proc_ranges * np.sin(angles_world)
             
-            # Store ONLY HITS for visualization (don't clutter view with max range points)
+            # store only hits for visualization (don't clutter view with max range points)
             self.current_lidar_xs = xs[hit_mask[process_mask]]
             self.current_lidar_ys = ys[hit_mask[process_mask]]
             
@@ -150,8 +161,44 @@ class MyRobotDriver():
                 world_points = np.column_stack((xs, ys))
                 robot_pose = (curr_x, curr_y, curr_yaw)
                 self.costmap.update_from_lidar(robot_pose, world_points)
+        
+        # Handle Replanning Wait
+        if self.replanning_timer > 0:
+            self.replanning_timer -= 1
+            self.left_prop_motor.setVelocity(0.0)
+            self.right_prop_motor.setVelocity(0.0)
+            if self.replanning_timer == 0:
+                 print("Wait complete. Replanning now...", flush=True)
+                 if not self.plan_to_current_waypoint(curr_x, curr_y, curr_yaw):
+                      print("Replanning failed! Path is blocked and no solution found.", flush=True)
+                      self.full_path_x = [] # Stop following the old invalid path
+            # Don't proceed to path following while waiting
+            # But continue visualizing
+            self.visualize_now(curr_x, curr_y, curr_yaw)
+            return
+
         if self.step_counter % 10 == 0:
             self.costmap.clean_noise()
+
+        # Check if current path is blocked (More frequent check: every 2 steps)
+        if self.step_counter % 2 == 0: 
+            if len(self.full_path_x) > 0:
+                # Check points ahead of the robot
+                search_start = self.last_target_idx
+                # Check up to 40 points ahead (approx 8m) - Look further!
+                search_end = min(self.last_target_idx + 40, len(self.full_path_x))
+                
+                if search_start < search_end:
+                    xs = self.full_path_x[search_start:search_end]
+                    ys = self.full_path_y[search_start:search_end]
+                    yaws = self.full_path_yaw[search_start:search_end]
+                    
+                    if self._check_collision_with_footprint(xs, ys, yaws):
+                        print("Path blocked! Stopping to replan...", flush=True)
+                        self.left_prop_motor.setVelocity(0.0)
+                        self.right_prop_motor.setVelocity(0.0)
+                        self.replanning_timer = 20 # Wait ~0.6s
+                        return
 
         # Startup Phase
         if self.startup_steps < self.startup_duration:
@@ -168,6 +215,12 @@ class MyRobotDriver():
             self.left_prop_motor.setVelocity(0.0)
             self.right_prop_motor.setVelocity(0.0)
             return
+
+        if self.current_waypoint_idx >= len(self.waypoints):
+             self.left_prop_motor.setVelocity(0.0)
+             self.right_prop_motor.setVelocity(0.0)
+             return
+
         # Check if reached current waypoint
         current_wp = self.waypoints[self.current_waypoint_idx]
         dist_to_wp = math.sqrt((curr_x - current_wp[0])**2 + (curr_y - current_wp[1])**2)
@@ -181,25 +234,41 @@ class MyRobotDriver():
                 return
             self.plan_to_current_waypoint(curr_x, curr_y, curr_yaw)
             return
-        # Find target point
-        (target_idx, target_x, target_y, stop_at_cusp) = self.find_target_path_point(curr_x, curr_y)
+    # Find target point
+        (target_idx, target_x, target_y, dist_to_cusp, cusp_idx) = self.find_target_path_point(curr_x, curr_y)
         # Gear
         desired_gear = 1
         if target_idx < len(self.full_path_dir):
             desired_gear = self.full_path_dir[target_idx]
         # Slow down if approaching cusp
         target_vel = self.v_max
-        dist_to_target = math.sqrt((curr_x - target_x)**2 + (curr_y - target_y)**2)
-        if stop_at_cusp:
-            target_vel = max(0.1, min(self.v_max, dist_to_target))
-            # CUSP SWITCHING LOGIC
-            if dist_to_target < 0.15: # Close enough to switch
-                # Force jump to next segment by advancing index
-                # This makes find_target_path_point pick up the NEW gear next step
-                self.last_target_idx = target_idx + 1
-                self.left_prop_motor.setVelocity(0.0)
-                self.right_prop_motor.setVelocity(0.0)
-                return # Skip this step to settle
+        
+        # Velocity Control Logic:
+        # Only slow down if the CUSP is actually close.
+        if dist_to_cusp < 1.0: # Start slowing down 5m away (smooth deceleration)
+            # Linearly interpolate or clamp
+            target_vel = max(0.2, min(self.v_max, dist_to_cusp))
+        
+        # cusp switching logic
+        if dist_to_cusp < 0.1: # Close enough to switch
+             if self.cusp_timer == 0:
+                  print(f"Approaching cusp (dist={dist_to_cusp:.2f}). Stopping...", flush=True)
+                  self.cusp_timer = 75 # start waiting
+             
+             if self.cusp_timer > 0:
+                  self.cusp_timer -= 1
+                  self.left_prop_motor.setVelocity(0.1)
+                  self.right_prop_motor.setVelocity(0.1)
+                  if self.cusp_timer == 0:
+                       # wait done. advance index to jump exactly to the new gear segment.
+                       print("Cusp wait done. Switching gear.", flush=True)
+                       # cusp_idx is the index of the first point in the new gear.
+                       # we align our tracking starting from there.
+                       self.last_target_idx = cusp_idx
+                  return # skip the rest while waiting
+        else:
+             self.cusp_timer = 0
+
         # Pure Pursuit
         target_angle = math.atan2(target_y - curr_y, target_x - curr_x)
         if desired_gear == -1:
@@ -215,7 +284,7 @@ class MyRobotDriver():
         self.right_prop_motor.setVelocity(right_vel)
         self.telemetry_counter = getattr(self, 'telemetry_counter', 0) + 1
         if self.telemetry_counter % 20 == 0:
-            print(f"[CTRL] pos:({curr_x:.2f},{curr_y:.2f}) err:{math.degrees(angle_error):.0f}° val:{target_vel:.1f}", flush=True)
+            print(f"[CTRL] pos:({curr_x:.2f},{curr_y:.2f}) err:{math.degrees(angle_error):.0f}° val:{target_vel:.1f} d_cusp:{dist_to_cusp:.2f}", flush=True)
         # Visualization
         self.visualize_now(curr_x, curr_y, curr_yaw)
 
@@ -238,6 +307,13 @@ class MyRobotDriver():
              self.full_path_yaw = np.array(path_yaw)
              self.full_path_dir = np.array(path_dir)
              self.last_target_idx = 0
+             
+             # check why it might be reversing
+             if len(self.full_path_dir) > 0:
+                 print(f"DEBUG: Path start gears: {self.full_path_dir[:10]}", flush=True)
+                 unique_gears = np.unique(self.full_path_dir)
+                 print(f"DEBUG: Unique gears in path: {unique_gears}", flush=True)
+                 
              return True
         else:
              print(f"Failed to plan to waypoint {self.current_waypoint_idx+1}", flush=True)
@@ -247,10 +323,10 @@ class MyRobotDriver():
         """
         finds the lookahead point for pure pursuit. 
         handles gear changes (cusps) by stopping before switching direction.
+        Returns: target_idx, target_x, target_y, dist_to_cusp, cusp_idx
         """
-        # optimized with numpy vectorization
         if len(self.full_path_x) == 0:
-            return 0, 0, 0, False
+            return 0, 0, 0, float('inf'), -1
 
         # 1. find closest point on the path to the robot
         # only search a small window ahead to ensure efficient progress
@@ -284,18 +360,26 @@ class MyRobotDriver():
         mask = dists >= self.Ld_base
         
         target_idx = len(self.full_path_x) - 1 # default to end of path
-        stop_at_cusp = False
         
-        # check for gear change (cusp) ahead
-        # we cannot look ahead past a gear switch because the robot needs to stop first
+        # Cusp Detection
         gear_changes = np.where(search_slice_dir != current_gear)[0]
         
         limit_idx = len(search_slice_x) # relative to closest_idx
+        dist_to_cusp = float('inf')
+        cusp_idx = -1
+        stop_at_cusp = False
         
         if len(gear_changes) > 0:
             # constraint: lookahead must stop before the gear change
             limit_idx = gear_changes[0]
-            # flag that we are constrained by a cusp
+            # Found a cusp!
+            cusp_idx = closest_idx + limit_idx
+            
+            # distance to the cusp point
+            cx = search_slice_x[limit_idx]
+            cy = search_slice_y[limit_idx]
+            dist_to_cusp = math.sqrt((cx - curr_x)**2 + (cy - curr_y)**2)
+            
             stop_at_cusp = True
             
         # Find valid lookahead points WITHIN the same gear
@@ -307,7 +391,7 @@ class MyRobotDriver():
             target_idx = closest_idx + slide_idx
         elif stop_at_cusp:
             # if constrained by a cusp and no far point found, aim for the cusp itself.
-            # safe fallback: aim for the point just before the gear change.
+            # aim for point just before switch to guide smoothly to it
             target_idx = closest_idx + limit_idx - 1
             if target_idx < closest_idx: target_idx = closest_idx
         else:
@@ -315,11 +399,11 @@ class MyRobotDriver():
             target_idx = len(self.full_path_x) - 1
             
         self.last_target_idx = closest_idx
-        return target_idx, self.full_path_x[target_idx], self.full_path_y[target_idx], stop_at_cusp
+        return target_idx, self.full_path_x[target_idx], self.full_path_y[target_idx], dist_to_cusp, cusp_idx
 
     def get_robot_footprint(self, x, y, yaw):
-        hl = 0.3
-        hw = 0.4
+        hl = 0.35
+        hw = 0.45
         
         # Determine sampling to ensure we don't skip obstacles > 0.1m
         res = 0.1
@@ -354,10 +438,27 @@ class MyRobotDriver():
         return corners_world
 
     def _check_collision_with_footprint(self, xs, ys, yaws):
-        for x, y, yaw in zip(xs, ys, yaws):
-            corners = self.get_robot_footprint(x, y, yaw)
-            c_xs = [p[0] for p in corners]
-            c_ys = [p[1] for p in corners]
-            if self.costmap.check_collision(c_xs, c_ys):
+        # check for all points in the trajectory chunk
+        # xs, ys, yaws are lists from the planner
+        
+        # 1. Convert trajectory points to arrays
+        traj_x = np.array(xs)
+        traj_y = np.array(ys)
+        traj_yaw = np.array(yaws)
+        
+        # 2. Prepare footprint (N_footprint, 2)
+        footprint_local = np.array(self._footprint_offsets) 
+        
+        # 3. For each point in trajectory, transform footprint
+        for i in range(len(traj_x)):
+            x, y, yaw = traj_x[i], traj_y[i], traj_yaw[i]
+            
+            c, s = math.cos(yaw), math.sin(yaw)
+            rot = np.array([[c, -s], [s, c]])
+            
+            world_pts = footprint_local @ rot.T + np.array([x, y])
+            
+            if self.costmap.check_collision(world_pts[:, 0], world_pts[:, 1]):
                 return True
+                
         return False

@@ -20,7 +20,7 @@ RectangleArena {
 }
 Fluid {
   translation 0 0 0
-  streamVelocity 0 0 0
+  streamVelocity 0.02 0.02 0
   children [
     DEF pool Shape {
       appearance PBRAppearance {
@@ -109,10 +109,52 @@ Solid {
   name "back_wall"
   boundingObject USE OBSTACLE_WALL
 }
+Solid {
+  translation 0.0 2.0 0.5
+  children [
+    DEF U_WALL_SIDE Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.2 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 4.0 0.5 2.0
+      }
+    }
+  ]
+  name "u_wall_left"
+  boundingObject USE U_WALL_SIDE
+}
+Solid {
+  translation 0.0 -2.0 0.5
+  children [
+    USE U_WALL_SIDE
+  ]
+  name "u_wall_right"
+  boundingObject USE U_WALL_SIDE
+}
+Solid {
+  translation 2.0 0.0 0.5
+  children [
+    DEF U_WALL_FRONT Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.2 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 0.5 4.5 2.0
+      }
+    }
+  ]
+  name "u_wall_front"
+  boundingObject USE U_WALL_FRONT
+}
 Robot {
   name "my_robot"
   controller "<extern>"
-  translation 0 0 0.3
+  translation -8 0 0.3
   rotation .577 -.577 -.577 2.09
   immersionProperties [
     DEF Board_Imm ImmersionProperties {
@@ -249,7 +291,7 @@ Robot {
       translation 0 -.15 0
       rotation 1 0 0 -1.5708
       name "lidar"
-      horizontalResolution 360
+      horizontalResolution 720
       fieldOfView 6.28319
       numberOfLayers 1
       minRange 0.35

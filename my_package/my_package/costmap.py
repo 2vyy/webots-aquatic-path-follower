@@ -87,24 +87,38 @@ class Costmap2D:
                 if 0 <= ex < self.width and 0 <= ey < self.height:
                     cv2.line(temp_img, (start_gx, start_gy), (ex, ey), 1, 1)
             clear_mask = temp_img == 1
-            # Clear unknown cells only
-            unknown_clear = (self.grid == -1) & clear_mask.T
-            self.grid[unknown_clear] = 0
-            # Mark hits as occupied (override anything)
-            valid_mask = (end_gxs >= 0) & (end_gxs < self.width) & (end_gys >= 0) & (end_gys < self.height)
+            
+            # Clear ALL cells along the ray (including occupied ones)
+            self.grid[clear_mask.T] = 0
+            
+            # Mark hits as occupied (re-apply them after clearing)
+            # Thicken the hits (3x3) to prevent 'clean_noise' from eroding them
+            # and to close gaps in walls.
+            valid_mask = (end_gxs >= 1) & (end_gxs < self.width - 1) & (end_gys >= 1) & (end_gys < self.height - 1)
+            
+            # Center
             self.grid[end_gxs[valid_mask], end_gys[valid_mask]] = 1
+            # Neighbors (3x3)
+            self.grid[end_gxs[valid_mask] + 1, end_gys[valid_mask]] = 1
+            self.grid[end_gxs[valid_mask] - 1, end_gys[valid_mask]] = 1
+            self.grid[end_gxs[valid_mask], end_gys[valid_mask] + 1] = 1
+            self.grid[end_gxs[valid_mask], end_gys[valid_mask] - 1] = 1
+            # Diagonals
+            self.grid[end_gxs[valid_mask] + 1, end_gys[valid_mask] + 1] = 1
+            self.grid[end_gxs[valid_mask] - 1, end_gys[valid_mask] - 1] = 1
+            self.grid[end_gxs[valid_mask] + 1, end_gys[valid_mask] - 1] = 1
+            self.grid[end_gxs[valid_mask] - 1, end_gys[valid_mask] + 1] = 1
         else:
             # SLOW METHOD: Bresenham in Python
             for ex, ey in zip(end_gxs, end_gys):
                 cells = self.bresenham_line(start_gx, start_gy, ex, ey)
                 for cx, cy in cells[:-1]:
                     if 0 <= cx < self.width and 0 <= cy < self.height:
-                        if self.grid[cx, cy] == -1:  # Only clear unknown
-                            self.grid[cx, cy] = 0
+                        self.grid[cx, cy] = 0
                 if len(cells) > 0:
                     cx, cy = cells[-1]
                     if 0 <= cx < self.width and 0 <= cy < self.height:
-                        self.grid[cx, cy] = 1  # Mark hit occupied
+                        self.grid[cx, cy] = 1
 
     @staticmethod
     def bresenham_line(x0, y0, x1, y1):

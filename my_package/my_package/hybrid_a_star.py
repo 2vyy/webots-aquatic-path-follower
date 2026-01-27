@@ -39,9 +39,9 @@ class HybridAStarPlanner:
         
         # Penalties
         self.steering_change_cost = 2.0 
-        self.gear_change_cost = 2.0 
+        self.gear_change_cost = 3.0 
         self.steering_cost = 2.0
-        self.reverse_cost = 0.5 
+        self.reverse_cost = 2.0 
 
         self.rs_shot_interval = 5 
         
