@@ -1,36 +1,13 @@
-# Aquatic Robot Path Planner & Controller
-
-A Webots simulation of a differential-drive aquatic robot capable of navigating complex obstacle environments with fluid dynamics. This project implements a Hybrid A* path planner for global navigation and a Pure Pursuit controller for trajectory tracking, handling both known static maps and unknown dynamic obstacles via Lidar.
+A Webots simulation of a differential-drive aquatic robot capable of navigating complex obstacle environments with fluid dynamics. This project implements a Hybrid A* path planner that uses Reeds-Shepp curves for branching heuristics and a Pure Pursuit controller, as well as processing LiDAR sensor data to dynamically update a costmap.
 
 ![Simulation Demo](https://raw.githubusercontent.com/2vyy/webots-aquatic-path-follower/refs/heads/main/recording.gif)
 
-## Technical Details
+### Technical Details
+- 3-point-turns or "cusps" are pretty tricky to handle with Pure Pursuit. The path planner returns a list of indexes where a "gear change" occurs and when the robot is close enough to one of these points, the controller logic switches to a special state that slow the robot down, stop it, and prepares for acceleration in the opposite direction.
+- This project was started when I had much less ROS experience than I do now, so the controller, planning, visualization, and Lidar parsing subsystems are contained within a single ROS 2 node. Because of this, there are noticable lag spikes when replanning is triggered. I've done some brief experiments and utilizing distributed nodes makes a significant difference, but I unfortunately learned lesson that after writing the 3,000 lines of code in this project.
+- The controller can handle a slight current force from the Fluid object (streamVelocity), but I've found it struggles to stay aligned to the path around >0.05 streamVelocity on the X and Y axes. There's likely some improvements to be made, but most of the error is that standard Pure Pursuit treats all angles of movement to be equal and doesn't account for force dynamics.
+- When the robot turns too quickly (especially during a lag spike as explained above), the physics engine causes the boat to roll slightly. This causes the 2D plane that the Lidar scans on to be angled, creating temporary jagged lines of cells that are falsely parsed as occupied in the costmap (visible in the gif). These are usually overridden quickly by the following scans and the tradeoff benefit to less noise-filtering logic is more stable obstacle detection and permeance.
 
-### Algorithms & Architecture
-* **Path Planning:** Uses Hybrid A* with Reeds-Shepp curves (heuristic) to generate kinematically feasible, smooth paths for non-holonomic robots.
-* **Control:** A tuned Pure Pursuit controller with adaptive lookahead logic and direct "gear" management for reversing maneuvers.
-* **Mapping:** Real-time Costmap that integrates Lidar scans to manage obstacles and inflation layers.
-
-### Edge Cases
-* **Cusps (Reversing):** To navigate tight spaces, the controller implements a "gear switching" state machine. It stops, moves forward slowly to align, and reverses direction when the path requires a 3-point turn (cusp).
-* **Dynamic Replanning:** If the path is blocked by a dynamic obstacle, the robot halts, inflates the costmap to the robot's footprint, and triggers a replan to find a new route.
-
-### Known Nuances
-* **Single-Node Latency:** The simulation step, perception, and control pipelines currently run within a single ROS 2 node. This introduces a slight but noticeable control latency compared to a distributed, multi-threaded architecture.
-* **Visual LiDAR Artifacts:** When the robot turns and accelerates quickly (such as when oscilating into a stable heading), the fluid dynamics cause the vessel to pitch and roll very slightly. This briefly angles the 2D plane that the Lidar scans are projected onto, creating temporary lines of cells that are considered occupied in the costmap (as seen in the gif). These are overridden quickly by the following scans and the tradeoff benefit is more solid obstacle detection.
-
-## Installation & Usage
-
-1.  **Dependencies:**
-    * Webots (R2023b or later recommended)
-    * ROS 2 Iron (Humble might work but i haven't tested it)
-    * Python 3.10+
-    * `numpy`, `opencv-python`, `scipy`
-
-2.  **Run:**
-    ```./run_simulation.sh
-    ```
-
-## Credits
+### Credits
 - Reference for fluid physics in WeBots: [silvery107/auto-docking-vessels](https://github.com/silvery107/auto-docking-vessels)
 - Reeds-Shepp Path Python implementation: [AtsushiSakai/PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics)
