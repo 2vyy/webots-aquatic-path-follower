@@ -1,0 +1,351 @@
+#VRML_SIM R2025a utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2022b/projects/objects/floors/protos/RectangleArena.proto"
+
+WorldInfo {}
+Viewpoint {
+  orientation -.6 .6 .6 2.1
+  position 0 0 40
+  follow ""
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  wallHeight 0.5
+  floorSize 20 20
+}
+Fluid { # no force vector applied
+  translation 0 0 0
+  streamVelocity 0 0 0
+  children [
+    DEF pool Shape {
+      appearance PBRAppearance {
+        transparency 0.5
+      }
+      geometry Box {
+        size 20 20 0.5
+      }
+    }
+  ]
+  boundingObject USE pool
+  locked TRUE
+}
+Transform {
+  translation 0 0 0.005
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0.2 0.2 0.2
+        roughness 1.0
+        metalness 0.0
+      }
+      geometry Box {
+        size 20 20 0.01
+      }
+    }
+  ]
+}
+Solid {
+  translation 3.0 1.5 0.5
+  children [
+    DEF OBSTACLE_BOX Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.2 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 1.0 1.0 2.0
+      }
+    }
+  ]
+  name "gate_left"
+  boundingObject USE OBSTACLE_BOX
+}
+Solid {
+  translation 3.0 -1.5 0.5
+  children [
+    USE OBSTACLE_BOX
+  ]
+  name "gate_right"
+  boundingObject USE OBSTACLE_BOX
+}
+Solid {
+  translation 5.0 0.0 0.5
+  children [
+    DEF OBSTACLE_CYLINDER Shape {
+      appearance PBRAppearance {
+        baseColor 0.2 0.2 0.8
+        roughness 0.3
+        metalness 0
+      }
+      geometry Cylinder {
+        height 2.0
+        radius 0.5
+      }
+    }
+  ]
+  name "center_pillar"
+  boundingObject USE OBSTACLE_CYLINDER
+}
+Solid {
+  translation 7.0 0.0 0.5
+  children [
+    DEF OBSTACLE_WALL Shape {
+      appearance PBRAppearance {
+        baseColor 0.2 0.8 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 1.0 10.0 2.0
+      }
+    }
+  ]
+  name "back_wall"
+  boundingObject USE OBSTACLE_WALL
+}
+Solid {
+  translation 0.0 2.0 0.5
+  children [
+    DEF U_WALL_SIDE Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.2 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 4.0 0.5 2.0
+      }
+    }
+  ]
+  name "u_wall_left"
+  boundingObject USE U_WALL_SIDE
+}
+Solid {
+  translation 0.0 -2.0 0.5
+  children [
+    USE U_WALL_SIDE
+  ]
+  name "u_wall_right"
+  boundingObject USE U_WALL_SIDE
+}
+Solid {
+  translation 2.0 0.0 0.5
+  children [
+    DEF U_WALL_FRONT Shape {
+      appearance PBRAppearance {
+        baseColor 0.8 0.2 0.2
+        roughness 0.3
+        metalness 0
+      }
+      geometry Box {
+        size 0.5 4.5 2.0
+      }
+    }
+  ]
+  name "u_wall_front"
+  boundingObject USE U_WALL_FRONT
+}
+Robot {
+  name "my_robot"
+  controller "<extern>"
+  translation -8 0 0.3
+  rotation .577 .577 .577 2.09
+  immersionProperties [
+    DEF Board_Imm ImmersionProperties {
+      fluidName "fluid"
+      dragForceCoefficients 0.5 0.5 0.1
+      viscousResistanceForceCoefficient 3
+      viscousResistanceTorqueCoefficient 2000
+    }
+  ]
+  children [
+    # Main body
+    Transform {
+      translation 0 0 0.05
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            roughness 0.5
+          }
+          geometry Capsule {
+            radius 0.1
+            height 0.5
+          }
+        }
+      ]
+    }
+    # Left wing
+    Transform {
+      translation -0.15 0 0.05
+      children [  
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            roughness 0.5
+          }
+          geometry Box {
+            size 0.2 0.05 0.05
+          }
+        }
+      ]
+    }
+    # Right wing
+    Transform {
+      translation 0.15 0 0.05
+      children [
+        Shape {
+          appearance PBRAppearance {
+            baseColor 0.5 0.5 0.5
+            roughness 0.5
+          }
+          geometry Box {
+            size 0.2 0.05 0.05
+          }
+        }
+      ]
+    }
+    # Left propeller
+    Transform {
+      translation -0.25 0 0.005
+      rotation 0 1 0 3.14
+      children [
+        Propeller {
+          shaftAxis 0 0 -1
+          centerOfThrust 0 0 0
+          thrustConstants 1 0
+          torqueConstants 0 0
+          fastHelixThreshold 75.4
+          device RotationalMotor {
+            name "left_prop_motor"
+            maxVelocity 20
+          }
+          fastHelix Solid {
+            children [
+              Transform {
+                rotation 0 0 0 1.5708
+                children [
+                  Shape {
+                    appearance PBRAppearance {
+                      baseColor 0.7 0.7 0.7
+                    }
+                    geometry Cylinder {
+                      radius 0.03
+                      height 0.1
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+    # Right propeller
+    Transform {
+      translation 0.25 0 0.005
+      rotation 0 1 0 3.14
+      children [
+        Propeller {
+          shaftAxis 0 0 -1
+          centerOfThrust 0 0 0
+          thrustConstants 1 0
+          torqueConstants 0 0
+          fastHelixThreshold 75.4
+          device RotationalMotor {
+            name "right_prop_motor"
+            maxVelocity 20
+          }
+          fastHelix Solid {
+            children [
+              Transform {
+                rotation 0 0 0 1.5708
+                children [
+                  Shape {
+                    appearance PBRAppearance {
+                      baseColor 0.7 0.7 0.7
+                    }
+                    geometry Cylinder {
+                      radius 0.03
+                      height 0.1
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+    GPS {
+      name "gps"
+    }
+    Compass {
+      name "compass"
+    }
+    Lidar {
+      translation 0 -.15 0
+      rotation 1 0 0 -1.5708
+      name "lidar"
+      horizontalResolution 3600
+      fieldOfView 6.28319
+      numberOfLayers 1
+      minRange 0.35
+      maxRange 30.0
+      type "fixed"
+    }
+  ]
+  boundingObject Group {
+    children [
+      # Main body
+      Transform {
+        translation 0 0 0.05
+        children [
+          Shape {
+            geometry Capsule {
+              radius 0.1
+              height 0.5
+            }
+          }
+        ]
+      }
+      # Left wing
+      Transform {
+        translation -0.15 0 0.05
+        children [
+          Shape {
+            geometry Box {
+              size 0.2 0.05 0.05
+            }
+          }
+        ]
+      }
+      # Right wing
+      Transform {
+        translation 0.15 0 0.05
+        children [
+          Shape {
+            geometry Box {
+              size 0.2 0.05 0.05
+            }
+          }
+        ]
+      }
+    ]
+  }
+  physics Physics {
+    density 500
+    centerOfMass [0 0 0.05]
+    inertiaMatrix [ ]
+    damping Damping {
+      linear 0.5
+      angular 1.0
+    }
+  }
+}

@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<robot name="blueboat_usv">
+    <webots>
+        <plugin type="usv_simulation.webots_interface.WebotsInterface" />
+    </webots>
+    
+    <link name="base_link">
+    </link>
+</robot>
