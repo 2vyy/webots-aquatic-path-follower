@@ -34,14 +34,12 @@ def generate_launch_description():
         ]
     )
 
-    # 4. TF PUBLISHER (Optional but good for Nav2 later)
-    # Publishes static transforms if you have them in the URDF
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         output='screen',
         parameters=[{
-            'robot_description': '<robot name=""><link name="base_link"/></robot>',
+            'robot_description': open(robot_description_path).read(),
             'use_sim_time': True
         }]
     )

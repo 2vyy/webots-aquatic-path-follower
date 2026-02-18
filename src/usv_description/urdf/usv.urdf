@@ -1,9 +1,112 @@
 <?xml version="1.0" ?>
-<robot name="blueboat_usv">
+<robot name="my_robot">
     <webots>
         <plugin type="usv_simulation.webots_interface.WebotsInterface" />
+        <immersionProperties>
+            <ImmersionProperties>
+                <fluidName>fluid</fluidName>
+                <dragForceCoefficients>0.5 0.5 0.1</dragForceCoefficients>
+                <viscousResistanceForceCoefficient>3</viscousResistanceForceCoefficient>
+                <viscousResistanceTorqueCoefficient>2000</viscousResistanceTorqueCoefficient>
+            </ImmersionProperties>
+        </immersionProperties>
     </webots>
     
+    <!-- Base link of the boat -->
     <link name="base_link">
+        <visual>
+            <origin xyz="0 0 0.05" rpy="0 0 0"/>
+            <geometry>
+                <capsule radius="0.1" length="0.5"/>
+            </geometry>
+        </visual>
+        <collision>
+            <origin xyz="0 0 0.05" rpy="0 0 0"/>
+            <geometry>
+                <capsule radius="0.1" length="0.5"/>
+            </geometry>
+        </collision>
     </link>
+
+    <!-- Left Wing -->
+    <link name="left_wing">
+        <visual>
+            <geometry>
+                <box size="0.2 0.05 0.05"/>
+            </geometry>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.2 0.05 0.05"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="left_wing_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="left_wing"/>
+        <origin xyz="-0.15 0 0.05" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Right Wing -->
+    <link name="right_wing">
+        <visual>
+            <geometry>
+                <box size="0.2 0.05 0.05"/>
+            </geometry>
+        </visual>
+        <collision>
+            <geometry>
+                <box size="0.2 0.05 0.05"/>
+            </geometry>
+        </collision>
+    </link>
+
+    <joint name="right_wing_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="right_wing"/>
+        <origin xyz="0.15 0 0.05" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Lidar -->
+    <link name="laser_link">
+    </link>
+
+    <joint name="laser_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="laser_link"/>
+        <origin xyz="0 -0.15 0" rpy="3.14159 0 1.5708"/>
+    </joint>
+
+    <!-- IMU -->
+    <link name="imu_link">
+    </link>
+
+    <joint name="imu_joint" type="fixed">
+        <parent link="base_link"/>
+        <child link="imu_link"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Propellers (Webots Propeller node support is better in PROTO, but we can use motors) -->
+    <link name="left_prop">
+    </link>
+
+    <joint name="left_prop_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="left_prop"/>
+        <origin xyz="-0.25 0 0.005" rpy="0 3.14159 0"/>
+        <axis xyz="0 0 -1"/>
+    </joint>
+
+    <link name="right_prop">
+    </link>
+
+    <joint name="right_prop_joint" type="continuous">
+        <parent link="base_link"/>
+        <child link="right_prop"/>
+        <origin xyz="0.25 0 0.005" rpy="0 3.14159 0"/>
+        <axis xyz="0 0 -1"/>
+    </joint>
+
 </robot>

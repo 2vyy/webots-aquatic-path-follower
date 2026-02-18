@@ -109,22 +109,7 @@ class WebotsInterface:
         t.transform.rotation.w = cy
         self.tf_broadcaster.sendTransform(t)
 
-        # 5. PUBLISH TF: base_link -> laser_link
-        # Align Webots Lidar frame to ROS FLU (Forward, Left, Up).
-        # The current quaternion (0.707, 0.707, 0, 0) represents a 180-degree rotation
-        # around the axis (1, 1, 0), which empirically aligns the sensor correctly.
-        t_laser = TransformStamped()
-        t_laser.header.stamp = ros_time
-        t_laser.header.frame_id = 'base_link'
-        t_laser.child_frame_id = 'laser_link'
-        t_laser.transform.translation.x = 0.0
-        t_laser.transform.translation.y = 0.0
-        t_laser.transform.translation.z = 0.0
-        t_laser.transform.rotation.x = 0.7071068
-        t_laser.transform.rotation.y = 0.7071068
-        t_laser.transform.rotation.z = 0.0
-        t_laser.transform.rotation.w = 0.0
-        self.tf_broadcaster.sendTransform(t_laser)
+
 
         # 6. PUBLISH ODOMETRY
         msg_odom = Odometry()
@@ -148,7 +133,6 @@ class WebotsInterface:
                 f'GPS Raw: [{gps_vals[0]:.3f}, {gps_vals[1]:.3f}, {gps_vals[2]:.3f}]\n'
                 f'Compass Raw: [{compass_vals[0]:.3f}, {compass_vals[1]:.3f}, {compass_vals[2]:.3f}]\n'
                 f'Computed Pose -> X: {pos_x:.3f}, Y: {pos_y:.3f}, Yaw: {yaw:.3f} rad ({math.degrees(yaw):.1f} deg)\n'
-                f'Laser TF Rotation: x={t_laser.transform.rotation.x:.3f}, y={t_laser.transform.rotation.y:.3f}, z={t_laser.transform.rotation.z:.3f}, w={t_laser.transform.rotation.w:.3f}\n'
                 f'------------------------'
             )
 

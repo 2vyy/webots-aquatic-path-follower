@@ -1,0 +1,64 @@
+#VRML_SIM R2023b utf8
+
+externproto "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+externproto "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+externproto "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
+externproto "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/fluids/protos/Fluid.proto"
+
+WorldInfo {
+  coordinateSystem "ENU"
+}
+Viewpoint {
+  orientation -0.5771 -0.5775 -0.5775 2.0944
+  follow "my_robot"
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+}
+RectangleArena {
+  floorAppearance PBRAppearance {
+    baseColor 0 0.5 0.5
+    roughness 0.5
+  }
+}
+Fluid {
+  translation 0 0 0
+  children [
+    Shape {
+      appearance PBRAppearance {
+        baseColor 0 0.5 0.8
+        transparency 0.5
+      }
+      geometry Box {
+        size 50 50 0.01
+      }
+    }
+  ]
+  name "fluid"
+  boundingObject Box {
+    size 50 50 0.01
+  }
+}
+Solid {
+  translation -4 0 0.25
+  children [
+    DEF U_WALL_FRONT Shape {
+      appearance PBRAppearance {
+        baseColor 1 1 1
+      }
+      geometry IndexedFaceSet {
+        coord Coordinate {
+          point [
+            0 0 0, 1.5 0 0, 1.5 0.3 0, 1.2 0.3 0, 1.2 0.1 0, 0.3 0.1 0, 0.3 0.3 0, 0 0.3 0
+          ]
+        }
+        coordIndex [
+          0, 1, 2, 7, -1, 2, 3, 4, 5, 6, 7, -1
+        ]
+      }
+    }
+  ]
+  name "u_wall_front"
+  boundingObject USE U_WALL_FRONT
+}
