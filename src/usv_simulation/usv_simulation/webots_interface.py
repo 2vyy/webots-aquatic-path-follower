@@ -6,6 +6,7 @@ from rosgraph_msgs.msg import Clock
 from builtin_interfaces.msg import Time
 from tf2_ros import TransformBroadcaster
 import math
+import struct
 
 class WebotsInterface:
     def init(self, webots_node, properties):
@@ -32,12 +33,14 @@ class WebotsInterface:
         self.lidar = self.__robot.getDevice('lidar')
         self.gps = self.__robot.getDevice('gps')
         self.compass = self.__robot.getDevice('compass')
+        self.imu = self.__robot.getDevice('imu')
 
         # --- Enable Sensors ---
         self.timestep = int(self.__robot.getBasicTimeStep())
         self.lidar.enable(self.timestep)
         self.gps.enable(self.timestep)
         self.compass.enable(self.timestep)
+        self.imu.enable(self.timestep)
 
         # --- ROS 2 Publishers ---
         self.pub_scan = self.__node.create_publisher(LaserScan, '/scan', 10)
@@ -51,6 +54,9 @@ class WebotsInterface:
         self.cmd_angular_z = 0.0
 
         self.__node.get_logger().info('USV Bridge initialised – coordinate frame fixes applied')
+
+        # IMU calibration baseline (set on first valid reading)
+        self._imu_baseline = None
 
     def __cmd_vel_callback(self, msg):
         self.cmd_linear_x = msg.linear.x
@@ -77,21 +83,20 @@ class WebotsInterface:
         # 2. READ SENSORS
         gps_vals = self.gps.getValues()
         compass_vals = self.compass.getValues()
+        imu_rpy = self.imu.getRollPitchYaw()
 
         if math.isnan(gps_vals[0]) or math.isnan(compass_vals[0]):
             return
 
+        # Since the robot natively follows the ROS X-forward convention (ENU),
+        # the raw IMU Roll (X), Pitch (Y), and Yaw (Z) perfectly match the odom frame.
+        cal_roll  = imu_rpy[0]
+        cal_pitch = imu_rpy[1]
+        yaw       = imu_rpy[2]
 
-
-        # 3. CALCULATE POSE
-        # Webots ENU World: X=East, Y=North, Z=Up (= ROS ENU)
-        # GPS returns position in world frame directly.
         pos_x = gps_vals[0]  # East
         pos_y = gps_vals[1]  # North
 
-        # Compass / Orientation
-        # Robot rotation matters a TON for tf tree stuff. ROS expects FLU (Forward, Left, Up) for X, Y, Z axes.
-        yaw = math.atan2(compass_vals[2], compass_vals[0])
         cy = math.cos(yaw * 0.5)
         sy = math.sin(yaw * 0.5)
 
@@ -126,39 +131,57 @@ class WebotsInterface:
         if not hasattr(self, '_dbg_counter'):
             self._dbg_counter = 0
         self._dbg_counter += 1
-        if self._dbg_counter % 60 == 1:
+        if self._dbg_counter % 5 == 1:
             self.__node.get_logger().info(
                 f'\n--- USV Bridge Debug ---\n'
                 f'Time: {ros_time.sec}.{ros_time.nanosec}\n'
                 f'GPS Raw: [{gps_vals[0]:.3f}, {gps_vals[1]:.3f}, {gps_vals[2]:.3f}]\n'
                 f'Compass Raw: [{compass_vals[0]:.3f}, {compass_vals[1]:.3f}, {compass_vals[2]:.3f}]\n'
+                f'IMU RPY (raw): roll={math.degrees(imu_rpy[0]):.2f} deg, pitch={math.degrees(imu_rpy[1]):.2f} deg, yaw={math.degrees(imu_rpy[2]):.2f} deg\n'
+                f'IMU RPY (cal): roll={math.degrees(cal_roll):.2f} deg, pitch={math.degrees(cal_pitch):.2f} deg\n'
                 f'Computed Pose -> X: {pos_x:.3f}, Y: {pos_y:.3f}, Yaw: {yaw:.3f} rad ({math.degrees(yaw):.1f} deg)\n'
+                f'cmd_vel -> linear: {self.cmd_linear_x:.3f}, angular: {self.cmd_angular_z:.3f}\n'
                 f'------------------------'
             )
 
         # 7. PUBLISH LIDAR
         if self.lidar.getSamplingPeriod() > 0:
-            ranges = self.lidar.getRangeImage()
-            if ranges:
-                msg_scan = LaserScan()
-                msg_scan.header.stamp = ros_time
-                msg_scan.header.frame_id = 'laser_link'
-                fov = self.lidar.getFov()
-                num_points = self.lidar.getHorizontalResolution()
-                msg_scan.angle_min = -fov / 2.0
-                msg_scan.angle_max = fov / 2.0
-                msg_scan.angle_increment = fov / num_points
-                msg_scan.range_min = 0.35
-                msg_scan.range_max = self.lidar.getMaxRange()
-                msg_scan.ranges = [r if r >= 0.35 else float('inf') for r in ranges]
-                self.pub_scan.publish(msg_scan)
+            if not getattr(self, '_pcl_enabled', False):
+                self.lidar.enablePointCloud()
+                self._pcl_enabled = True
+
+            # Suppress scan entirely if robot is too tilted (scan plane hits water)
+            TILT_THRESHOLD = math.radians(10.0)
+            if abs(cal_roll) > TILT_THRESHOLD or abs(cal_pitch) > TILT_THRESHOLD:
+                pass  # Don't publish anything if too tilted
+            else:
+                    # --- 7a. Publish LaserScan natively on /scan ---
+                    # Webots returns the range image as a flat list. With numberOfLayers=1,
+                    # it is exactly one horizontal sweep.
+                    range_image = self.lidar.getRangeImage()
+                    if range_image:
+                        msg_ls = LaserScan()
+                        msg_ls.header.stamp = ros_time
+                        msg_ls.header.frame_id = 'laser_link'
+                        msg_ls.angle_min = -self.lidar.getFov() / 2.0
+                        msg_ls.angle_max = self.lidar.getFov() / 2.0
+                        msg_ls.angle_increment = self.lidar.getFov() / self.lidar.getHorizontalResolution()
+                        msg_ls.time_increment = 0.0
+                        msg_ls.scan_time = self.lidar.getSamplingPeriod() / 1000.0
+                        msg_ls.range_min = self.lidar.getMinRange()
+                        msg_ls.range_max = self.lidar.getMaxRange()
+                        
+                        # Apply ROS counter-clockwise rotation convention by reversing the array
+                        msg_ls.ranges = range_image[::-1]
+                        self.pub_scan.publish(msg_ls)
 
         # 8. WRITE MOTORS
         v = self.cmd_linear_x
         omega = self.cmd_angular_z
-        # Velocity Multiplier to convert m/s to rad/s (approximate)
-        multiplier = 20.0
-        left_vel = (v - (omega * self.wheel_base / 2.0)) * multiplier
-        right_vel = (v + (omega * self.wheel_base / 2.0)) * multiplier
+        # Scale Nav2's m/s commands to Webots motor rad/s.
+        # Nav2 desired_linear_vel=1.0 m/s -> motor runs at 10 rad/s (half of maxVelocity=20)
+        multiplier = 10.0
+        left_vel  = (v - omega * self.wheel_base) * multiplier
+        right_vel = (v + omega * self.wheel_base) * multiplier
         self.left_motor.setVelocity(left_vel)
         self.right_motor.setVelocity(right_vel)

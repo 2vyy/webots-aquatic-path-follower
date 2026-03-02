@@ -155,7 +155,6 @@ Robot {
   name "my_robot"
   controller "<extern>"
   translation -8 0 0.3
-  rotation .577 .577 .577 2.09
   immersionProperties [
     DEF Board_Imm ImmersionProperties {
       fluidName "fluid"
@@ -168,6 +167,7 @@ Robot {
     # Main body
     Transform {
       translation 0 0 0.05
+      rotation 0 1 0 1.5708
       children [
         Shape {
           appearance PBRAppearance {
@@ -183,7 +183,7 @@ Robot {
     }
     # Left wing
     Transform {
-      translation -0.15 0 0.05
+      translation 0 0.15 0.05
       children [  
         Shape {
           appearance PBRAppearance {
@@ -198,7 +198,7 @@ Robot {
     }
     # Right wing
     Transform {
-      translation 0.15 0 0.05
+      translation 0 -0.15 0.05
       children [
         Shape {
           appearance PBRAppearance {
@@ -213,11 +213,10 @@ Robot {
     }
     # Left propeller
     Transform {
-      translation -0.25 0 0.005
-      rotation 0 1 0 3.14
+      translation -0.25 0.1 0.005
       children [
         Propeller {
-          shaftAxis 0 0 -1
+          shaftAxis 1 0 0
           centerOfThrust 0 0 0
           thrustConstants 1 0
           torqueConstants 0 0
@@ -229,7 +228,7 @@ Robot {
           fastHelix Solid {
             children [
               Transform {
-                rotation 0 0 0 1.5708
+                rotation 0 1 0 1.5708
                 children [
                   Shape {
                     appearance PBRAppearance {
@@ -249,11 +248,10 @@ Robot {
     }
     # Right propeller
     Transform {
-      translation 0.25 0 0.005
-      rotation 0 1 0 3.14
+      translation -0.25 -0.1 0.005
       children [
         Propeller {
-          shaftAxis 0 0 -1
+          shaftAxis 1 0 0
           centerOfThrust 0 0 0
           thrustConstants 1 0
           torqueConstants 0 0
@@ -265,7 +263,7 @@ Robot {
           fastHelix Solid {
             children [
               Transform {
-                rotation 0 0 0 1.5708
+                rotation 0 1 0 1.5708
                 children [
                   Shape {
                     appearance PBRAppearance {
@@ -289,12 +287,15 @@ Robot {
     Compass {
       name "compass"
     }
+    InertialUnit {
+      name "imu"
+    }
     Lidar {
-      translation 0 -.15 0
-      rotation 1 0 0 -1.5708
+      translation 0.2 0 0.2
       name "lidar"
-      horizontalResolution 3600
+      horizontalResolution 512
       fieldOfView 6.28319
+      verticalFieldOfView 0.523598775
       numberOfLayers 1
       minRange 0.35
       maxRange 30.0
@@ -306,6 +307,7 @@ Robot {
       # Main body
       Transform {
         translation 0 0 0.05
+        rotation 0 1 0 1.5708
         children [
           Shape {
             geometry Capsule {
@@ -317,7 +319,7 @@ Robot {
       }
       # Left wing
       Transform {
-        translation -0.15 0 0.05
+        translation 0 0.15 0.05
         children [
           Shape {
             geometry Box {
@@ -328,7 +330,7 @@ Robot {
       }
       # Right wing
       Transform {
-        translation 0.15 0 0.05
+        translation 0 -0.15 0.05
         children [
           Shape {
             geometry Box {

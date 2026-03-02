@@ -15,7 +15,6 @@ def generate_launch_description():
     params_file = LaunchConfiguration('params_file')
     slam_params_file = LaunchConfiguration('slam_params_file')
 
-    # Declare the params file argument
     declare_params_file = DeclareLaunchArgument(
         'params_file',
         default_value=os.path.join(usv_nav_pkg_dir, 'config', 'nav2_params.yaml'),
@@ -28,7 +27,7 @@ def generate_launch_description():
         description='Full path to the SLAM Toolbox parameters file'
     )
 
-    # SLAM Toolbox — provides the map -> odom TF
+    # SLAM Toolbox — reads /scan
     slam_toolbox_node = Node(
         package='slam_toolbox',
         executable='async_slam_toolbox_node',
@@ -40,7 +39,10 @@ def generate_launch_description():
         ],
     )
 
-    # Include the standard Nav2 Bringup launch
+    # Custom BT XML for USV (replaces Spin with BackUp)
+    bt_xml_file = os.path.join(usv_nav_pkg_dir, 'config', 'usv_nav_bt.xml')
+
+    # Nav2 Bringup — costmap reads /scan
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(nav2_pkg_dir, 'launch', 'navigation_launch.py')
@@ -49,6 +51,7 @@ def generate_launch_description():
             'use_sim_time': 'True',
             'params_file': params_file,
             'autostart': 'True',
+            'default_bt_xml_filename': bt_xml_file,
         }.items()
     )
 
