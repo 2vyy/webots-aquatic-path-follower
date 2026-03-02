@@ -15,11 +15,12 @@ TexturedBackground {
 TexturedBackgroundLight {
 }
 RectangleArena {
-  wallHeight 0.5
+  translation 0 0 -2.0
+  wallHeight 2.5
   floorSize 20 20
 }
 Fluid { # no force vector applied
-  translation 0 0 0
+  translation 0 0 -0.875
   streamVelocity 0 0 0
   children [
     DEF pool Shape {
@@ -27,7 +28,7 @@ Fluid { # no force vector applied
         transparency 0.5
       }
       geometry Box {
-        size 20 20 0.5
+        size 20 20 2.25
       }
     }
   ]
@@ -35,7 +36,7 @@ Fluid { # no force vector applied
   locked TRUE
 }
 Transform {
-  translation 0 0 0.005
+  translation 0 0 -2.0
   children [
     Shape {
       appearance PBRAppearance {
@@ -164,56 +165,34 @@ Robot {
     }
   ]
   children [
-    # Main body
+    # BlueBoat Hull Mesh
     Transform {
-      translation 0 0 0.05
+      translation 0 0 0.0
       rotation 0 1 0 1.5708
       children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.5 0.5
-            roughness 0.5
-          }
-          geometry Capsule {
-            radius 0.1
-            height 0.5
-          }
-        }
-      ]
-    }
-    # Left wing
-    Transform {
-      translation 0 0.15 0.05
-      children [  
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.5 0.5
-            roughness 0.5
-          }
-          geometry Box {
-            size 0.2 0.05 0.05
-          }
-        }
-      ]
-    }
-    # Right wing
-    Transform {
-      translation 0 -0.15 0.05
-      children [
-        Shape {
-          appearance PBRAppearance {
-            baseColor 0.5 0.5 0.5
-            roughness 0.5
-          }
-          geometry Box {
-            size 0.2 0.05 0.05
-          }
+        Transform {
+          rotation 0 0 1 1.5708
+          children [
+            Shape {
+              castShadows FALSE
+              appearance PBRAppearance {
+                baseColor 0.2 0.4 0.8
+                roughness 0.5
+                metalness 0.1
+              }
+              geometry Mesh {
+                url [
+                  "../../../../usv_description/share/usv_description/meshes/blueboat_visual.obj"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
     # Left propeller
     Transform {
-      translation -0.25 0.1 0.005
+      translation -0.45 0.25 0.005
       children [
         Propeller {
           shaftAxis 1 0 0
@@ -248,7 +227,7 @@ Robot {
     }
     # Right propeller
     Transform {
-      translation -0.25 -0.1 0.005
+      translation -0.45 -0.25 0.005
       children [
         Propeller {
           shaftAxis 1 0 0
@@ -291,50 +270,25 @@ Robot {
       name "imu"
     }
     Lidar {
-      translation 0.2 0 0.2
+      translation 0 0 -1.0
       name "lidar"
       horizontalResolution 512
       fieldOfView 6.28319
-      verticalFieldOfView 0.523598775
       numberOfLayers 1
-      minRange 0.35
-      maxRange 30.0
+      minRange 0.01
+      maxRange 50.0
       type "fixed"
     }
   ]
   boundingObject Group {
     children [
-      # Main body
+      # Simplified Hull Bounding Box
       Transform {
-        translation 0 0 0.05
-        rotation 0 1 0 1.5708
-        children [
-          Shape {
-            geometry Capsule {
-              radius 0.1
-              height 0.5
-            }
-          }
-        ]
-      }
-      # Left wing
-      Transform {
-        translation 0 0.15 0.05
+        translation 0 0 -0.5
         children [
           Shape {
             geometry Box {
-              size 0.2 0.05 0.05
-            }
-          }
-        ]
-      }
-      # Right wing
-      Transform {
-        translation 0 -0.15 0.05
-        children [
-          Shape {
-            geometry Box {
-              size 0.2 0.05 0.05
+              size 1.2 0.75 0.4
             }
           }
         ]
@@ -343,7 +297,7 @@ Robot {
   }
   physics Physics {
     density 500
-    centerOfMass [0 0 0.05]
+    centerOfMass [0 0 -0.5]
     inertiaMatrix [ ]
     damping Damping {
       linear 0.5

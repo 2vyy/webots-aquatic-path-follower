@@ -191,7 +191,7 @@ local_costmap:
       width: 10
       height: 10
       resolution: 0.1
-      footprint: "[ [0.5, 0.25], [0.5, -0.25], [-0.5, -0.25], [-0.5, 0.25] ]"
+      footprint: "[ [0.6, 0.375], [0.6, -0.375], [-0.6, -0.375], [-0.6, 0.375] ]"
       plugins: ["obstacle_layer", "inflation_layer"]
       
       obstacle_layer:
@@ -206,8 +206,9 @@ local_costmap:
           marking: True
           data_type: "LaserScan"
           raytrace_max_range: 30.0
-          raytrace_min_range: 0.0
+          raytrace_min_range: 0.8
           obstacle_max_range: 25.0
+          obstacle_min_range: 0.8
           inf_is_valid: true
 
       inflation_layer:
@@ -223,7 +224,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: True
-      robot_radius: 0.25
+      footprint: "[ [0.6, 0.375], [0.6, -0.375], [-0.6, -0.375], [-0.6, 0.375] ]"
       resolution: 0.1
       track_unknown_space: false
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
@@ -246,8 +247,9 @@ global_costmap:
           marking: True
           data_type: "LaserScan"
           raytrace_max_range: 30.0
-          raytrace_min_range: 0.0
+          raytrace_min_range: 0.8
           obstacle_max_range: 25.0
+          obstacle_min_range: 0.8
           inf_is_valid: true
 
       inflation_layer:

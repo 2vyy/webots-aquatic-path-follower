@@ -15,58 +15,20 @@
     <!-- Base link of the boat -->
     <link name="base_link">
         <visual>
-            <origin xyz="0 0 0.05" rpy="0 1.5708 0"/>
+            <origin xyz="0 0 0.0" rpy="0 1.5708 1.5708"/>
             <geometry>
-                <capsule radius="0.1" length="0.5"/>
+                <mesh filename="package://usv_description/meshes/blueboat_visual.obj"/>
             </geometry>
         </visual>
         <collision>
-            <origin xyz="0 0 0.05" rpy="0 1.5708 0"/>
+            <origin xyz="0 0 -0.5" rpy="0 0 0"/>
             <geometry>
-                <capsule radius="0.1" length="0.5"/>
+                <box size="1.2 0.75 0.4"/>
             </geometry>
         </collision>
     </link>
 
-    <!-- Left Wing (+Y is Left in ROS) -->
-    <link name="left_wing">
-        <visual>
-            <geometry>
-                <box size="0.2 0.05 0.05"/>
-            </geometry>
-        </visual>
-        <collision>
-            <geometry>
-                <box size="0.2 0.05 0.05"/>
-            </geometry>
-        </collision>
-    </link>
-
-    <joint name="left_wing_joint" type="fixed">
-        <parent link="base_link"/>
-        <child link="left_wing"/>
-        <origin xyz="0 0.15 0.05" rpy="0 0 0"/>
-    </joint>
-
-    <!-- Right Wing (-Y is Right in ROS) -->
-    <link name="right_wing">
-        <visual>
-            <geometry>
-                <box size="0.2 0.05 0.05"/>
-            </geometry>
-        </visual>
-        <collision>
-            <geometry>
-                <box size="0.2 0.05 0.05"/>
-            </geometry>
-        </collision>
-    </link>
-
-    <joint name="right_wing_joint" type="fixed">
-        <parent link="base_link"/>
-        <child link="right_wing"/>
-        <origin xyz="0 -0.15 0.05" rpy="0 0 0"/>
-    </joint>
+    <!-- Wings are now part of the main hull mesh -->>
 
     <!-- Lidar (Placed high up and forward, clean orientation) -->
     <link name="laser_link">
@@ -75,7 +37,7 @@
     <joint name="laser_joint" type="fixed">
         <parent link="base_link"/>
         <child link="laser_link"/>
-        <origin xyz="0.2 0 0.2" rpy="0 0 0"/>
+        <origin xyz="0 0 0.0" rpy="0 0 0"/>
     </joint>
 
     <!-- IMU & GPS -->
@@ -95,7 +57,7 @@
     <joint name="left_prop_joint" type="continuous">
         <parent link="base_link"/>
         <child link="left_prop"/>
-        <origin xyz="-0.25 0.1 0.005" rpy="0 0 0"/>
+        <origin xyz="-0.45 0.25 0.005" rpy="0 0 0"/>
         <axis xyz="1 0 0"/>
     </joint>
 
@@ -105,7 +67,7 @@
     <joint name="right_prop_joint" type="continuous">
         <parent link="base_link"/>
         <child link="right_prop"/>
-        <origin xyz="-0.25 -0.1 0.005" rpy="0 0 0"/>
+        <origin xyz="-0.45 -0.25 0.005" rpy="0 0 0"/>
         <axis xyz="1 0 0"/>
     </joint>
 
