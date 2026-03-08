@@ -14,7 +14,10 @@ A Webots simulation of a differential-drive aquatic robot navigating complex obs
 - When the robot turns too quickly (especially during a lag spike as explained above), the physics engine causes the boat to roll slightly. This causes the 2D plane that the Lidar scans upon to be angled. A tilt threshold filter suppresses scan publishing when roll/pitch exceeds 10 degrees.
 - A custom behavior tree replaces Nav2's default Spin recovery with a "BackUp" behavior that makes the boat reverse away from walls/obstacles and replan.
 - This project originally was made without Nav2! I've since updated it to better make use Nav2 and ROS as a whole, but the original code is still available in the `old_code` branch.
+- `main.launch.py` has a `use_sim` toggle. If false, `hardware_launch.py` is used which launches a MAVROS node. It sends standard `/cmd_vel` Twist msgs over MAVLink to an ArduRover flight controller onboard a physical BlueBoat. (hasn't been tested on actual hardware yet, but it should theoretically work.)
 
 ### Credits
 - Reference for fluid physics in Webots: [silvery107/auto-docking-vessels](https://github.com/silvery107/auto-docking-vessels)
-- Reeds-Shepp path implementation: [AtsushiSakai/PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics)
+- Pure Python implementation of Reeds-Shepp pathing: [AtsushiSakai/PythonRobotics](https://github.com/AtsushiSakai/PythonRobotics)
+- BlueOS integration plugin: [itskalvik/blueos-ros2](https://github.com/itskalvik/blueos-ros2)
+- BlueBoat vehicle (where I got the CAD model from): [BlueBoat](https://bluerobotics.com/store/boat/blueboat/blueboat/)
