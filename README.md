@@ -1,6 +1,6 @@
 A Webots simulation of a differential-drive aquatic robot capable of navigating complex obstacle environments with fluid dynamics. This project implements a Hybrid A* path planner that uses Reeds-Shepp curves for branching heuristics and a Pure Pursuit controller, as well as processing LiDAR sensor data to dynamically update a costmap.
 
-![Simulation Demo](https://raw.githubusercontent.com/2vyy/webots-aquatic-path-follower/refs/heads/main/recording.gif)
+![Simulation Demo](https://raw.githubusercontent.com/2vyy/webots-aquatic-path-follower/refs/heads/old_code/recording.gif)
 
 ### Technical Details
 - 3-point-turns or "cusps" are pretty tricky to handle with Pure Pursuit. The path planner returns a list of indexes where a "gear change" occurs and when the robot is close enough to one of these points, the controller logic switches to a special state that slow the robot down, stop it, and prepares for acceleration in the opposite direction.
