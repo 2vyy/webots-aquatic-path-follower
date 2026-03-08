@@ -5,6 +5,7 @@ from launch.actions import IncludeLaunchDescription, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from nav2_common.launch import RewrittenYaml
 
 def generate_launch_description():
     # Paths
@@ -49,6 +50,18 @@ def generate_launch_description():
     # Custom BT XML for USV (replaces Spin with BackUp)
     bt_xml_file = os.path.join(usv_nav_pkg_dir, 'config', 'usv_nav_bt.xml')
 
+    param_substitutions = {
+        'default_nav_to_pose_bt_xml': bt_xml_file,
+        'default_nav_through_poses_bt_xml': bt_xml_file,
+    }
+
+    configured_params = RewrittenYaml(
+        source_file=params_file,
+        root_key='',
+        param_rewrites=param_substitutions,
+        convert_types=True
+    )
+
     # Nav2 Bringup — costmap reads /scan
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -56,9 +69,8 @@ def generate_launch_description():
         ),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'params_file': params_file,
+            'params_file': configured_params,
             'autostart': 'True',
-            'default_bt_xml_filename': bt_xml_file,
         }.items()
     )
 

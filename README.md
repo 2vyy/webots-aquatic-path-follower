@@ -1,12 +1,61 @@
 A Webots simulation of a differential-drive aquatic robot navigating complex obstacle environments with fluid dynamics. Uses ROS 2 Nav2 for path planning and control, with SLAM Toolbox for real-time map building from LiDAR data.
 
-![Simulation Demo](https://raw.githubusercontent.com/2vyy/webots-aquatic-path-follower/refs/heads/main/recording.gif)
-(TODO: make a new recording in RViz)
+![Simulation Demo](https://raw.githubusercontent.com/2vyy/webots-aquatic-path-follower/refs/heads/old_code/recording.gif)
+
+(TODO: make a new recording in RViz, this is from `old_code`)
 
 ### Architecture
 - **`usv_simulation`** — Webots controller bridge that publishes GPS/IMU odometry, LiDAR scans, and translates Nav2 `cmd_vel` into differential propeller commands
 - **`usv_navigation`** — Nav2 bringup with a tuned Hybrid A* planner (SmacPlannerHybrid with Reeds-Shepp curves), Regulated Pure Pursuit controller, and SLAM Toolbox for online map building
 - **`usv_description`** — URDF model and TF tree
+```mermaid
+graph TD
+    %% Top Alignments
+    subgraph Hardware_Abstraction ["Hardware / Simulation"]
+        direction LR
+        Sim[("usv_simulation (Webots)")]
+        Hardware[("MAVROS (BlueOS)")]
+    end
+
+    User([User])
+
+    subgraph usv_description
+        URDF[("URDF, TF Tree, & Model")]
+    end
+
+    Hardware_Abstraction ~~~ User
+    User ~~~ usv_description
+
+    subgraph usv_navigation ["usv_navigation"]
+        SLAM["SLAM Toolbox"]
+        GridTopic(("/map"))
+        BT["Behavior Tree Navigator"]
+        Planner["Planner Server"]
+        Controller["Controller Server"]
+    end
+
+    %% Data Flow
+    User -->|"/goal_pose"| BT
+
+    URDF -.->|"/tf, /tf_static"| Hardware_Abstraction
+
+    Hardware_Abstraction -->|"/scan"| SLAM
+
+    Hardware_Abstraction --> OdomTopic(("/odom"))
+    OdomTopic --> SLAM & Planner & Controller
+
+    SLAM --> GridTopic
+    
+    BT --> Controller
+    BT <--> Planner
+
+    
+    GridTopic -.-> Planner & Controller
+    
+    Planner -->|"/plan"| Controller
+
+    Controller -->|"/cmd_vel"| Hardware_Abstraction
+```
 
 ### Technical Details
 - Nav2 is configured to use a Hybrid A* path planner that uses Reeds-Shepp curves for branching heuristics and a Pure Pursuit controller. SLAM Toolbox is used for processing LiDAR sensor data to dynamically update a costmap.
