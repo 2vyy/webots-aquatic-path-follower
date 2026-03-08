@@ -161,7 +161,7 @@ Robot {
       fluidName "fluid"
       dragForceCoefficients 0.5 0.5 0.1
       viscousResistanceForceCoefficient 3
-      viscousResistanceTorqueCoefficient 2000
+      viscousResistanceTorqueCoefficient 5
     }
   ]
   children [
@@ -197,7 +197,7 @@ Robot {
         Propeller {
           shaftAxis 1 0 0
           centerOfThrust 0 0 0
-          thrustConstants 1 0
+          thrustConstants 10 0
           torqueConstants 0 0
           fastHelixThreshold 75.4
           device RotationalMotor {
@@ -232,7 +232,7 @@ Robot {
         Propeller {
           shaftAxis 1 0 0
           centerOfThrust 0 0 0
-          thrustConstants 1 0
+          thrustConstants 10 0
           torqueConstants 0 0
           fastHelixThreshold 75.4
           device RotationalMotor {
@@ -275,7 +275,7 @@ Robot {
       horizontalResolution 512
       fieldOfView 6.28319
       numberOfLayers 1
-      minRange 0.01
+      minRange 0.5
       maxRange 50.0
       type "fixed"
     }

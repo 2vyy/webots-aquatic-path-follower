@@ -179,9 +179,13 @@ class WebotsInterface:
         v = self.cmd_linear_x
         omega = self.cmd_angular_z
         # Scale Nav2's m/s commands to Webots motor rad/s.
-        # Nav2 desired_linear_vel=1.0 m/s -> motor runs at 10 rad/s (half of maxVelocity=20)
-        multiplier = 10.0
-        left_vel  = (v - omega * self.wheel_base) * multiplier
-        right_vel = (v + omega * self.wheel_base) * multiplier
+        # thrustConstants=10 means each rad/s generates 10N of thrust.
+        # A lower multiplier prevents overshooting while keeping strong turning torque.
+        multiplier = 3.0
+        # Water drag makes turning vastly harder than driving on land.
+        # We massively multiply the angular command so the differential thrust can fight the water.
+        angular_gain = 5.0
+        left_vel  = (v - omega * self.wheel_base * angular_gain) * multiplier
+        right_vel = (v + omega * self.wheel_base * angular_gain) * multiplier
         self.left_motor.setVelocity(left_vel)
         self.right_motor.setVelocity(right_vel)

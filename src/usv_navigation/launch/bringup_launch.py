@@ -14,6 +14,7 @@ def generate_launch_description():
     # Arguments
     params_file = LaunchConfiguration('params_file')
     slam_params_file = LaunchConfiguration('slam_params_file')
+    use_sim_time = LaunchConfiguration('use_sim_time')
 
     declare_params_file = DeclareLaunchArgument(
         'params_file',
@@ -27,6 +28,12 @@ def generate_launch_description():
         description='Full path to the SLAM Toolbox parameters file'
     )
 
+    declare_use_sim_time = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='true',
+        description='Use simulation clock (true) or wall clock (false)'
+    )
+
     # SLAM Toolbox — reads /scan
     slam_toolbox_node = Node(
         package='slam_toolbox',
@@ -35,7 +42,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             slam_params_file,
-            {'use_sim_time': True}
+            {'use_sim_time': use_sim_time}
         ],
     )
 
@@ -48,7 +55,7 @@ def generate_launch_description():
             os.path.join(nav2_pkg_dir, 'launch', 'navigation_launch.py')
         ),
         launch_arguments={
-            'use_sim_time': 'True',
+            'use_sim_time': use_sim_time,
             'params_file': params_file,
             'autostart': 'True',
             'default_bt_xml_filename': bt_xml_file,
@@ -58,6 +65,7 @@ def generate_launch_description():
     return LaunchDescription([
         declare_params_file,
         declare_slam_params_file,
+        declare_use_sim_time,
         slam_toolbox_node,
         nav2_launch,
     ])

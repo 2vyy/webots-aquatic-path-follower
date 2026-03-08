@@ -59,7 +59,10 @@ class WaypointSender(Node):
         
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose.header.frame_id = 'odom'
-        goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
+        # Use time(0) to request the latest available TF, avoiding
+        # "extrapolation into the past" errors when SLAM starts late.
+        goal_msg.pose.header.stamp.sec = 0
+        goal_msg.pose.header.stamp.nanosec = 0
         
         goal_msg.pose.pose.position.x = wp[0]
         goal_msg.pose.pose.position.y = wp[1]
