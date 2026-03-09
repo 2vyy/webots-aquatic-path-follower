@@ -1,8 +1,6 @@
 A Webots simulation of a differential-drive aquatic robot navigating complex obstacle environments with fluid dynamics. Uses ROS 2 Nav2 for path planning and control, with SLAM Toolbox for real-time map building from LiDAR data.
 
-![Simulation Demo](https://raw.githubusercontent.com/2vyy/webots-aquatic-path-follower/refs/heads/old_code/recording.gif)
-
-(TODO: make a new recording in RViz, this is from `old_code`)
+![Simulation Demo](https://raw.githubusercontent.com/2vyy/webots-aquatic-path-follower/refs/heads/main/screencast.gif)
 
 ### Architecture
 - **`usv_simulation`** — Webots controller bridge that publishes GPS/IMU odometry, LiDAR scans, and translates Nav2 `cmd_vel` into differential propeller commands
